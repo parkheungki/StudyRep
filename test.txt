@@ -1,0 +1,347 @@
+'''
+두 모집단에 대한 모분산 검정
+'''
+line1 = [200, 203, 201, 194, 195, 202, 200, 199, 204, 199, 195,
+ 196, 199, 200, 199, 198, 200, 198, 199, 199, 197, 194, 197, 193, 202]
+
+line2 = [204, 201, 196, 202, 205, 205, 197, 209, 197, 201, 187, 201, 192, 204, 
+         203, 200, 207, 201,
+ 213, 198, 198, 208, 197, 197, 199, 194, 203, 204, 205, 202, 202, 197,207, 212]
+
+# 신뢰구간
+stats.f.interval(alpha=0.95,dfn = len(line1)-1,dfd = len(line2)-1)
+
+# 항상 기각역과 비교하는 습관을 갖자.. 지금도 기각역 밖이라서 귀무가설을 기각하는데.. pvalue는 1.99가 나왔어.. 말이 되나?
+fdistribution = stats.f(len(line1)-1,len(line2)-1) # build an F-distribution object 
+fdistribution
+
+fstatistics  = np.array(line1).var(ddof=1) / np.array(line2).var(ddof=1)
+fstatistics
+
+'''
+pvalue 
+'''
+pvalue = fdistribution.cdf(fstatistics)*2
+pvalue
+
+'''
+좌측 신뢰구간
+'''
+fdistribution.ppf(0.05 /2)
+
+'''
+오른쪽 신뢰구간
+'''
+fdistribution.ppf(1 - (0.05 /2))
+##################################################################################
+
+from sklearn.metrics import confusion_matrix, accuracy_score, precision_score, recall_score, f1_score
+from sklearn.metrics import roc_auc_score
+
+def get_clf_eval(y_test, pred=None, pred_proba=None):
+    confusion = confusion_matrix( y_test, pred)
+    accuracy = accuracy_score(y_test , pred)
+    precision = precision_score(y_test , pred)
+    recall = recall_score(y_test , pred)
+    f1 = f1_score(y_test,pred)
+    # ROC-AUC 추가 
+    roc_auc = roc_auc_score(y_test, pred_proba)
+    print('오차 행렬')
+    print(confusion)
+    # ROC-AUC print 추가
+    print('정확도: {0:.4f}, 정밀도: {1:.4f}, 재현율: {2:.4f},\
+    F1: {3:.4f}, AUC:{4:.4f}'.format(accuracy, precision, recall, f1, roc_auc))
+    
+    
+# 인자로 사이킷런의 Estimator객체와, 학습/테스트 데이터 세트를 입력 받아서 학습/예측/평가 수행.
+def get_model_train_eval(model, ftr_train=None, ftr_test=None, tgt_train=None, tgt_test=None):
+    model.fit(ftr_train, tgt_train)
+    pred = model.predict(ftr_test)
+    pred_proba = model.predict_proba(ftr_test)[:, 1]
+    get_clf_eval(tgt_test, pred, pred_proba)
+    
+import numpy as np
+
+def get_outlier(df=None, column=None, weight=1.5):
+    # fraud에 해당하는 column 데이터만 추출, 1/4 분위와 3/4 분위 지점을 np.percentile로 구함. 
+    fraud = df[df['Class']==1][column]
+    quantile_25 = np.percentile(fraud.values, 25)
+    quantile_75 = np.percentile(fraud.values, 75)
+    # IQR을 구하고, IQR에 1.5를 곱하여 최대값과 최소값 지점 구함. 
+    iqr = quantile_75 - quantile_25
+    iqr_weight = iqr * weight
+    lowest_val = quantile_25 - iqr_weight
+    highest_val = quantile_75 + iqr_weight
+    # 최대값 보다 크거나, 최소값 보다 작은 값을 아웃라이어로 설정하고 DataFrame index 반환. 
+    outlier_index = fraud[(fraud < lowest_val) | (fraud > highest_val)].index
+    return outlier_index    
+
+# 엘보우 기법 (오차제곱합의 값이 최소가 되도록 결정하는 방법)
+def elbow(data, length):
+    sse = [] # sum of squre error 오차제곱합
+    for i in range(2, length):
+        kmeans = KMeans(n_clusters=i)
+        kmeans.fit(data)
+        # SSE 값 저장
+        sse.append(kmeans.inertia_)
+    plt.plot(range(2, length), sse, 'bo-')
+    plt.title("elbow method")
+    plt.xlabel("number of clusters")
+    plt.ylabel("SSE")
+    plt.show()
+
+### 여러개의 클러스터링 갯수를 List로 입력 받아 각각의 실루엣 계수를 면적으로 시각화한 함수 작성
+def visualize_silhouette(cluster_lists, X_features): 
+
+    from sklearn.datasets import make_blobs
+    from sklearn.cluster import KMeans
+    from sklearn.metrics import silhouette_samples, silhouette_score
+
+    import matplotlib.pyplot as plt
+    import matplotlib.cm as cm
+    import math
+
+    # 입력값으로 클러스터링 갯수들을 리스트로 받아서, 각 갯수별로 클러스터링을 적용하고 실루엣 개수를 구함
+    n_cols = len(cluster_lists)
+
+    # plt.subplots()으로 리스트에 기재된 클러스터링 수만큼의 sub figures를 가지는 axs 생성 
+    fig, axs = plt.subplots(figsize=(4*n_cols, 4), nrows=1, ncols=n_cols)
+
+    # 리스트에 기재된 클러스터링 갯수들을 차례로 iteration 수행하면서 실루엣 개수 시각화
+    for ind, n_cluster in enumerate(cluster_lists):
+
+        # KMeans 클러스터링 수행하고, 실루엣 스코어와 개별 데이터의 실루엣 값 계산. 
+        clusterer = KMeans(n_clusters = n_cluster, max_iter=500, random_state=0)
+        cluster_labels = clusterer.fit_predict(X_features)
+
+        sil_avg = silhouette_score(X_features, cluster_labels)
+        sil_values = silhouette_samples(X_features, cluster_labels)
+
+        y_lower = 10
+        axs[ind].set_title('Number of Cluster : '+ str(n_cluster)+'\n' \
+                          'Silhouette Score :' + str(round(sil_avg,3)) )
+        axs[ind].set_xlabel("The silhouette coefficient values")
+        axs[ind].set_ylabel("Cluster label")
+        axs[ind].set_xlim([-0.1, 1])
+        axs[ind].set_ylim([0, len(X_features) + (n_cluster + 1) * 10])
+        axs[ind].set_yticks([])  # Clear the yaxis labels / ticks
+        axs[ind].set_xticks([0, 0.2, 0.4, 0.6, 0.8, 1])
+
+        # 클러스터링 갯수별로 fill_betweenx( )형태의 막대 그래프 표현. 
+        for i in range(n_cluster):
+            ith_cluster_sil_values = sil_values[cluster_labels==i]
+            ith_cluster_sil_values.sort()
+
+            size_cluster_i = ith_cluster_sil_values.shape[0]
+            y_upper = y_lower + size_cluster_i
+
+            color = cm.nipy_spectral(float(i) / n_cluster)
+            axs[ind].fill_betweenx(np.arange(y_lower, y_upper), 0, ith_cluster_sil_values, \
+                                facecolor=color, edgecolor=color, alpha=0.7)
+            axs[ind].text(-0.05, y_lower + 0.5 * size_cluster_i, str(i))
+            y_lower = y_upper + 10
+
+        axs[ind].axvline(x=sil_avg, color="red", linestyle="--")
+		
+### 여러개의 클러스터링 갯수를 List로 입력 받아 각각의 클러스터링 결과를 시각화 
+def visualize_kmeans_plot_multi(cluster_lists, X_features):
+    
+    from sklearn.cluster import KMeans
+    from sklearn.decomposition import PCA
+    import pandas as pd
+    import numpy as np
+    
+    # plt.subplots()으로 리스트에 기재된 클러스터링 만큼의 sub figures를 가지는 axs 생성 
+    n_cols = len(cluster_lists)
+    fig, axs = plt.subplots(figsize=(4*n_cols, 4), nrows=1, ncols=n_cols)
+    
+    # 입력 데이터의 FEATURE가 여러개일 경우 2차원 데이터 시각화가 어려우므로 PCA 변환하여 2차원 시각화
+    pca = PCA(n_components=2)
+    pca_transformed = pca.fit_transform(X_features)
+    dataframe = pd.DataFrame(pca_transformed, columns=['PCA1','PCA2'])
+    
+     # 리스트에 기재된 클러스터링 갯수들을 차례로 iteration 수행하면서 KMeans 클러스터링 수행하고 시각화
+    for ind, n_cluster in enumerate(cluster_lists):
+        
+        # KMeans 클러스터링으로 클러스터링 결과를 dataframe에 저장. 
+        clusterer = KMeans(n_clusters = n_cluster, max_iter=500, random_state=0)
+        cluster_labels = clusterer.fit_predict(pca_transformed)
+        dataframe['cluster']=cluster_labels
+        
+        unique_labels = np.unique(clusterer.labels_)
+        markers=['o', 's', '^', 'x', '*']
+       
+        # 클러스터링 결과값 별로 scatter plot 으로 시각화
+        for label in unique_labels:
+            label_df = dataframe[dataframe['cluster']==label]
+            if label == -1:
+                cluster_legend = 'Noise'
+            else :
+                cluster_legend = 'Cluster '+str(label)           
+            axs[ind].scatter(x=label_df['PCA1'], y=label_df['PCA2'], s=70,\
+                        edgecolor='k', marker=markers[label], label=cluster_legend)
+
+        axs[ind].set_title('Number of Cluster : '+ str(n_cluster))    
+        axs[ind].legend(loc='upper right')
+    
+    plt.show()		
+        
+irisDF = pd.DataFrame(data=iris.data, columns=feature_names)
+visualize_silhouette([ 2, 3, 4, 5], irisDF)        
+
+def visualize_scatter(cluster_lists, X): 
+    # KMeans 객체를 이용하여 X 데이터를 K-Means 클러스터링 수행     
+    # 리스트에 기재된 클러스터링 갯수들을 차례로 iteration 수행하면서 실루엣 개수 시각화
+    
+    for ind, n_cluster in enumerate(cluster_lists):
+        X_features = X.copy()
+        clusterer = KMeans(n_clusters = n_cluster, max_iter=500, random_state=0)
+        cluster_labels = clusterer.fit_predict(X_features)
+        X_features['kmeans_label']  = cluster_labels
+
+        #cluster_centers_ 는 개별 클러스터의 중심 위치 좌표 시각화를 위해 추출
+        centers = clusterer.cluster_centers_
+#         print(centers.shape)
+        unique_labels = np.unique(cluster_labels)
+        markers=['o', 's', '^', 'P','D','H','x']
+
+        # 군집된 label 유형별로 iteration 하면서 marker 별로 scatter plot 수행. 
+        for label in unique_labels:
+            label_cluster = X_features[X_features['kmeans_label']==label]
+            center_x_y = centers[label]
+            plt.scatter(x=label_cluster['sepal_length'], y=label_cluster['sepal_width'], edgecolor='k', 
+                        marker=markers[label] )
+
+            # 군집별 중심 위치 좌표 시각화 
+            plt.scatter(x=center_x_y[0], y=center_x_y[1], s=200, color='white',
+                        alpha=0.9, edgecolor='k', marker=markers[label])
+            plt.scatter(x=center_x_y[0], y=center_x_y[1], s=70, color='k', edgecolor='k', 
+                        marker='$%d$' % label)
+            
+            plt.title('Number of Cluster : '+ str(n_cluster) )
+
+        plt.show()
+    
+
+### 클러스터 결과를 담은 DataFrame과 사이킷런의 Cluster 객체등을 인자로 받아 클러스터링 결과를 시각화하는 함수  
+def visualize_cluster_plot(clusterobj, dataframe, label_name, iscenter=True):
+    if iscenter :
+        centers = clusterobj.cluster_centers_
+        
+    unique_labels = np.unique(dataframe[label_name].values)
+    markers=['o', 's', '^', 'x', '*','+','o','^']
+    isNoise=False
+    
+    '''
+    변수가 많을경우 여기에서 pca라던지 차원축소를 해서 2차원으로 만들면 될듯
+    '''
+    for label in unique_labels:
+        label_cluster = dataframe[dataframe[label_name]==label]
+        if label == -1:
+            cluster_legend = 'Noise'
+            isNoise=True
+        else :
+            cluster_legend = 'Cluster '+str(label)
+        
+        plt.scatter(x=label_cluster['ftr1'], y=label_cluster['ftr2'], s=70,\
+                    edgecolor='k', marker=markers[label], label=cluster_legend)
+        
+        if iscenter:
+            center_x_y = centers[label]
+            plt.scatter(x=center_x_y[0], y=center_x_y[1], s=250, color='white',
+                        alpha=0.9, edgecolor='k', marker=markers[label])
+            plt.scatter(x=center_x_y[0], y=center_x_y[1], s=70, color='k',\
+                        edgecolor='k', marker='$%d$' % label)
+    if isNoise:
+        legend_loc='upper center'
+    else: legend_loc='upper right'
+    
+    plt.legend(loc=legend_loc)
+    plt.show()
+
+#series.plot()
+
+def plot_rolling(data, interval):
+    
+    rolmean = data.rolling(interval).mean()
+    rolstd = data.rolling(interval).std()
+    
+    #Plot rolling statistics:
+    plt.figure(figsize=(10, 6))
+    plt.xlabel('Date')
+    orig = plt.plot(data, color='blue',label='Original')
+    mean = plt.plot(rolmean, color='red', label='Rolling Mean')
+    std = plt.plot(rolstd, color='black', label = 'Rolling Std')
+    plt.legend(loc='best')
+    plt.show()
+    
+plot_rolling(series, 30)
+
+from statsmodels.tsa.stattools import kpss
+from statsmodels.tsa.stattools import adfuller
+import warnings
+warnings.filterwarnings("ignore")
+
+def kpss_test(series, **kw):    
+    statistic, p_value, n_lags, critical_values = kpss(series, **kw)
+    
+    # Format Output
+    print(f'KPSS Statistic: {statistic}')
+    print(f'p-value: {p_value}')
+    print(f'num lags: {n_lags}')
+    print('Critial Values:')
+    
+    for key, value in critical_values.items():
+        print(f'   {key} : {value}')    
+    print('KPSS(추세가 있어도 계절성만 없다면 정상으로 판별함)')
+    print(f'Result: The series is {"not " if p_value < 0.05 else ""} stationary')
+
+def print_adfuller (x):
+    result = adfuller(x)
+    print(f'ADF Statistic: {result[0]:.3f}')
+    print(f'p-value: {result[1]:.3f}')
+    print('Critical Values:')
+    for key, value in result[4].items():
+        print('\t%s: %.3f' % (key, value)) 
+    print('ADF (계절성이 있어도 추세만 없다면 정상으로 판별함)')
+    print(f'Result: The series is {"not " if result[1] >= 0.05 else ""} stationary')
+    
+
+import pmdarima as pm
+model = pm.auto_arima(y = target_train        # 데이터
+                      , d = 0            # 차분 차수, ndiffs 결과!
+                      , start_p = 0 
+                      , max_p = 5   
+                      , start_q = 0 
+                      , max_q = 3   
+                      , m = 1       
+                      , seasonal = False # 계절성 ARIMA가 아니라면 필수!
+                      , stepwise = True
+                      , trace=True
+                      )
+
+from statsmodels.tsa.arima.model import ARIMA
+
+def my_auto_arima(data, order,sort = 'AIC'):
+    order_list = []
+    aic_list = []
+    bic_lsit = []
+    d = order[1]
+    for p in range(order[0]):        
+        for q in range(order[2]):
+            model = ARIMA(data, order=(p,d,q))
+            try:
+                model_fit = model.fit()
+                c_order = f'p{p} d{d} q{q}'
+                aic = model_fit.aic
+                bic = model_fit.bic
+                order_list.append(c_order)
+                aic_list.append(aic)
+                bic_list.append(bic)
+            except:
+                pass
+    result_df = pd.DataFrame(list(zip(order_list, aic_list)),columns=['order','AIC'])
+    result_df.sort_values(sort, inplace=True)
+    return result_df
+
+my_auto_arima(target_train, [6,0,4])[:10]
