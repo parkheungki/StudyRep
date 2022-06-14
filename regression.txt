@@ -1,0 +1,538 @@
+#회귀분석
+
+plt.rc("font", family = "Malgun Gothic")
+import matplotlib
+matplotlib.rcParams['axes.unicode_minus'] = False
+
+숫자형 자료들의 기본적인 통계 자료들을 파악
+df_train.describe()
+
+문자형 자료들의 기본 정보를 파악
+# int, float 을 제외한 object만 문자형 자료다.
+df_train.describe(include='object')
+
+중복 확인
+# Checking duplicates
+print(sum(df_train.duplicated(subset = 'Id')) == 0)
+
+### 데이터 구조 Insight
+- 1460개의 행을 가지고, 81개의 열을 가지는 데이터
+- 8개의 범주형 데이터와 7개의 수치형 데이터, 1개의 이진형 데이터가 존재한다.
+- 결측치는 workclass의 경우 1836개, occupation의 경우 1843개 native.country의 경우 583개를 가짐
+- ID를 기준으로 중복된 데이터는 존재 하지 않는다.
+
+## 결측치 확인
+def check_missing_col(dataframe):
+    missing_col = []
+    for col in dataframe.columns:
+        missing_values = sum(dataframe[col].isna())
+        is_missing = True if missing_values >= 1 else False
+        if is_missing:
+            print(f'결측치가 있는 컬럼은: {col} 입니다')
+            print(f'해당 컬럼에 총 {missing_values} 개의 결측치가 존재합니다.')
+            missing_col.append([col, dataframe[col].dtype,missing_values])
+    if missing_col == []:
+        print('결측치가 존재하지 않습니다')
+    return missing_col
+
+missing_col = check_missing_col(df_train)
+pd.DataFrame(missing_col)
+
+
+# 결측치가 있는 row들을 확인합니다.
+df_train[df_train.isna().sum(axis=1) > 0]
+
+for col in missing_col:    
+    print("피쳐 " , col[0])
+    print(df_train[col[0]].unique())
+    
+#결측치 시각화
+missing = df_train.isnull().sum()
+missing = missing[missing > 0]
+missing.sort_values(inplace=True)
+
+missing.plot.bar(figsize = (12,6))    
+
+plt.xlabel("", fontsize = 20)
+plt.ylabel("", fontsize = 20)
+plt.title("Total Missing Value", fontsize = 20)
+
+for i, val in enumerate(missing.values):
+    plt.text(i,val,"%s"%val, horizontalalignment='center')    
+plt.show()
+
+#결측치 상관관계
+import seaborn as sns
+import matplotlib.pyplot as plt
+missingdata_df  = df_train.columns[df_train.isnull().any()].tolist()
+colormap = plt.cm.PuBu
+sns.heatmap(df_train[missingdata_df].corr(),square = True, linewidths = 0.1,
+            cmap = colormap, linecolor = "white", vmax=0.8,annot=True, )
+plt.title("Correlation with Missing Values", fontsize = 20)
+plt.show()
+
+#종속변수 시각화
+f , axes = plt.subplots(1,4)
+axes = axes.flatten()
+f.set_size_inches(20,5)
+
+# 이적료에 log
+df_train["log_SalePrice"] = np.log(df_train['SalePrice'])
+
+sns.histplot(x="SalePrice", data=df_train, bins=20,ax=axes[0],
+             kde=True,stat="density")
+axes[0].set(title = "SalePrice")
+sns.histplot(x="log_SalePrice", data=df_train, ax=axes[1])
+axes[1].set(title = "log_SalePrice")
+sns.boxplot(y="SalePrice", data=df_train, ax=axes[2])
+axes[2].set(title = "SalePrice")
+sns.boxplot(y="log_SalePrice", data=df_train, ax=axes[3])
+axes[3].set(title = "log_SalePrice")
+
+import scipy.stats as stats
+
+stats.shapiro(df_train['SalePrice'])
+
+# 범주형 변수별 그룹확인
+from IPython.display import display
+cate_feat = []
+num_feat = []
+for col in df_train.columns:
+    target = df_train[col]
+    if target.nunique() <=50:
+        print(col,df_train[col].dtype,target.unique())
+        display(target.value_counts().to_frame())
+#         print()
+        cate_feat.append(col)
+    else:
+        print('연속형', col, df_train[col].dtype,len(target.unique()))
+        num_feat.append(col)
+print('범주형 :', cate_feat)
+print('연속형: ', num_feat)
+
+#범주형 변수 데이터 시각화
+plt.figure(figsize=(20,70)) # 먼저 창을 만들고
+n = 1
+for col in cate_feat:
+    unique_df = df_train[col].value_counts()
+    
+    if len(unique_df) < 150:
+        ax = plt.subplot(31,2,n) # for문을 돌면서 Axes를 추가
+        unique_df.plot(kind='bar') 
+        plt.title(col) 
+        n+=1
+
+# plt.tight_layout()  # 창 크기에 맞게 조정        
+plt.show()         
+
+# 범주형 변수 상관관계
+from scipy.stats import chi2_contingency, chisquare
+import seaborn as sns 
+
+category_feature = cate_feat.copy()
+for col in ['PoolQC' , 'MiscFeature', 'Alley', 'Fence','FireplaceQu']:
+    category_feature.remove(col)
+
+corr_list= []
+
+for i in category_feature:
+    c_list = []
+    for j in category_feature:
+        ct = pd.crosstab(df_train[i],df_train[j])
+        X2=chi2_contingency(observed=ct)[0]
+        n = len(df_train)
+        minDim = min(len(df_train[i].unique()),len(df_train[j].unique()))-1
+        c = np.sqrt((X2/n) / minDim)
+#         c = np.sqrt(result[0]/(len(train)*(min(len(train[i].unique()),len(train[j].unique()))-1)))
+        c_list.append(c)
+    corr_list.append(c_list)
+    
+corr_df = pd.DataFrame(corr_list,columns=category_feature, index=category_feature)
+
+sns.set(rc = {'figure.figsize':(20,12)})
+sns.heatmap(corr_df,vmin=-1,vmax=1,cmap='RdBu',linewidths=.1,annot=True, fmt='.2f')
+
+#연속형 변수 시각화
+import warnings
+warnings.filterwarnings(action='ignore')
+n = 1
+
+plt.figure(figsize=(20,70)) # 먼저 창을 만들고
+for col in num_feat:
+    ax = plt.subplot(22,2,n)
+    sns.distplot(df_train.loc[df_train[col].notnull(), col])
+    plt.title(col)
+    n += 1
+    
+plt.tight_layout()  # 창 크기에 맞게 조정         
+plt.show()
+
+# 연속형 자료 boxplot
+import warnings
+warnings.filterwarnings(action='ignore')
+n = 1
+
+plt.figure(figsize=(20,70)) # 먼저 창을 만들고
+for col in num_feat:
+    ax = plt.subplot(22,2,n)    
+    sns.boxplot(data = df_train, y=col, ax=ax)
+    plt.title(col)
+    n += 1
+    
+plt.tight_layout()  # 창 크기에 맞게 조정         
+plt.show()
+
+#범주형 변수 및 종속변수 boxplot
+li_cat_feats = list(cate_feat)
+nr_rows = 15
+nr_cols = 3
+
+fig, axs = plt.subplots(nr_rows, nr_cols, figsize=(nr_cols*4,nr_rows*3))
+
+for r in range(0,nr_rows):
+    for c in range(0,nr_cols):  
+        i = r*nr_cols+c
+        if i < len(li_cat_feats):
+            sns.boxplot(x=li_cat_feats[i], y=df_train["SalePrice"], 
+                        data=df_train, ax = axs[r][c])
+    
+plt.tight_layout()    
+plt.show()
+
+#연속형 변수 상관관계
+
+import numpy as np
+
+corr_df = df_train.corr()
+
+# 사이즈 조정
+sns.set(rc={'figure.figsize':(25,12)})
+
+# 절반만 표시하기 위한 mask 설정
+mask=np.zeros_like(corr_df, dtype=np.bool)
+mask[np.triu_indices_from(mask)]=True
+
+# ax = sns.heatmap(corr_df,
+#                  annot=True, # 데이터 값 표시
+#                  mask=mask, # 마스크 적용 표시
+#                  cmap=plt.cm.PuBu)
+
+sns.heatmap(df_train.corr(),square = True, linewidths = 0.1,
+            cmap = colormap, linecolor = "white", vmax=0.8,annot=True)
+
+plt.xticks(rotation=45)
+plt.title('Relationship of cols', fontsize=20)
+plt.show() 
+
+#변수가 많을 경우 종속변수와 상관계수가 높은 순으로 히트맵 그려보자
+k= 11
+cols = df_train.corr().nlargest(k,'SalePrice')['SalePrice'].index
+print(cols)
+cm = np.corrcoef(df_train[cols].values.T)
+f , ax = plt.subplots(figsize = (12,10))
+sns.heatmap(cm, vmax=.8, linewidths=0.1,square=True,annot=True,cmap=colormap,
+            linecolor="white",xticklabels = cols.values ,
+            annot_kws = {'size':14},yticklabels = cols.values)
+
+
+# null 처리
+# Null 이 너무 많은 컬럼들과 불필요한 컬럼 삭제
+df_train = df_train.drop(['Id','PoolQC' , 'MiscFeature', 'Alley', 
+                          'Fence','FireplaceQu'], axis=1 )
+df_test = df_test.drop(['Id','PoolQC' , 'MiscFeature', 'Alley', 
+                        'Fence','FireplaceQu'], axis=1 )
+
+# Drop 하지 않는 숫자형 Null컬럼들은 평균값으로 대체
+df_train.fillna(df_train.mean(),inplace=True)
+df_test.fillna(df_test.mean(),inplace=True)
+
+# Null 값이 있는 피처명과 타입을 추출
+null_column_count = df_train.isnull().sum()[df_train.isnull().sum() > 0]
+print('## Null 피처의 Type :\n', df_train.dtypes[null_column_count.index])
+'''
+문자형 피처를 제외 하고는 null 값이 없다. 문자형 피처는 원핫 인코딩으로 변환..
+원한 인코딩으로 변화를 하면 null 값은 자동으로 'None' 칼럼으로 대체 해주기 때문에 
+별도의 null 처리가 필요없다. 
+'''
+
+
+from sklearn.metrics import mean_squared_error, mean_absolute_error,\
+                mean_absolute_percentage_error, r2_score
+
+# log 값 변환 시 NaN등의 이슈로 log() 가 아닌 log1p() 를 이용하여 RMSLE 계산
+def rmsle(y, pred):
+    log_y = np.log1p(y)
+    log_pred = np.log1p(pred)
+    squared_error = (log_y - log_pred) ** 2
+    rmsle = np.sqrt(np.mean(squared_error))
+    return rmsle
+
+# 사이킷런의 mean_square_error() 를 이용하여 RMSE 계산
+def rmse(y,pred):
+    return np.sqrt(mean_squared_error(y,pred))
+
+# MSE, RMSE, RMSLE 를 모두 계산 
+def evaluate_regr(y,pred):
+    rmsle_val = rmsle(y,pred)
+    rmse_val = rmse(y,pred)
+    # MAE 는 scikit learn의 mean_absolute_error() 로 계산
+    mae_val = mean_absolute_error(y,pred)
+    mse = mean_squared_error(y,pred)
+    mape = mean_absolute_percentage_error(y,pred)
+    r2 = r2_score(y,pred)
+    print('RMSLE: {0:.3f}, RMSE: {1:.3F}, MAE: {2:.3F}'.
+                              format(rmsle_val, rmse_val, mae_val))
+    print('MSE :{0:.3F}, MAPE :{1:.3F}, R2 :{2:.3F}  '.
+                              format(mse, mape, r2))
+    
+# 모델과 학습/테스트 데이터 셋을 입력하면 성능 평가 수치를 반환
+def get_model_predict(model, X_train, X_test, y_train, 
+                                  y_test, is_expm1=False):
+    model.fit(X_train, y_train)
+    pred = model.predict(X_test)
+    if is_expm1 :
+        y_test = np.expm1(y_test)
+        pred = np.expm1(pred)
+    print('###',model.__class__.__name__,'###')
+    evaluate_regr(y_test, pred)
+# end of function get_model_predict      
+
+def get_top_error_data(y_test, pred, n_tops = 5):
+    # DataFrame에 컬럼들로 실제 대여횟수(count)와 예측 값을 서로 비교 할 수 있도록 생성. 
+    result_df = pd.DataFrame(y_test.values, columns=['real_count'])
+    result_df['predicted_count']= np.round(pred)
+    result_df['diff'] = np.abs(result_df['real_count'] - 
+                                   result_df['predicted_count'])
+    # 예측값과 실제값이 가장 큰 데이터 순으로 출력. 
+    print(result_df.sort_values('diff', ascending=False)[:n_tops])
+    
+def get_top_bottom_coef(model, n=10):
+    # coef_ 속성을 기반으로 Series 객체를 생성. index는 컬럼명. 
+    coef = pd.Series(model.coef_, index=X_features.columns)
+    
+    # + 상위 10개 , - 하위 10개 coefficient 추출하여 반환.
+    coef_high = coef.sort_values(ascending=False).head(n)
+    coef_low = coef.sort_values(ascending=False).tail(n)
+    return coef_high, coef_low
+
+def visualize_coefficient(models):
+    
+    # 입력인자로 받은 list객체인 models에서 차례로 model을 추출하여 회귀 계수 시각화. 
+    for i_num, model in enumerate(models):
+         # 3개 회귀 모델의 시각화를 위해 3개의 컬럼을 가지는 subplot 생성
+        fig, axs = plt.subplots(figsize=(10,8),nrows=1, ncols=1)        
+        # 상위 10개, 하위 10개 회귀 계수를 구하고, 이를 판다스 concat으로 결합. 
+        coef_high, coef_low = get_top_bottom_coef(model)
+#         print(coef_high, coef_low)
+        coef_concat = pd.concat( [coef_high , coef_low] )
+        # 순차적으로 ax subplot에 barchar로 표현. 한 화면에 표현하기 위해 
+        # tick label 위치와 font 크기 조정. 
+        axs.set_title(model.__class__.__name__+' Coeffiecents', size=25)
+        
+        for label in (axs.get_xticklabels() + axs.get_yticklabels()):
+            label.set_fontsize(22)
+            
+        sns.barplot(x=coef_concat.values, y=coef_concat.index , ax=axs)
+        
+        
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LinearRegression
+
+y_target = df_train_ohe_df['SalePrice']
+X_features = df_train_ohe_df.drop(['SalePrice'], axis=1)
+
+X_train, X_test, y_train,y_test = train_test_split(X_features,
+                                y_target,test_size=0.3, random_state=123)
+
+lr_reg = LinearRegression()
+lr_reg.fit(X_train,y_train)
+pred = lr_reg.predict(X_test)
+
+evaluate_regr(y_test,pred)
+
+# 실제값과 예측값이 어느정도 차이가 나는지 확인
+get_top_error_data(y_test,pred)
+
+# 종속변수 로그 변환후 학습
+y_target_log = np.log1p(y_target)
+
+sns.histplot(y_target_log, bins=20,kde=True,stat="density")
+plt.show()
+
+# 전체 데이터 셋으로 교차 검증수행
+from sklearn.model_selection import cross_val_score
+
+def get_avg_rmse_cv(models):
+    for model in models:
+        # 분할하지 않고 전체 데이터로 cross_val_score( ) 수행. 모델별 CV RMSE값과 평균 RMSE 출력
+        rmse_list = np.sqrt(-cross_val_score(model, X_features, y_target_log,
+                                scoring="neg_mean_squared_error", cv = 5))
+        rmse_avg = np.mean(rmse_list)
+        print('\n{0} CV RMSE 값 리스트: {1}'.format( 
+                                model.__class__.__name__, np.round(rmse_list, 3)))
+        print('{0} CV 평균 RMSE 값: {1}'.format( 
+                                model.__class__.__name__, np.round(rmse_avg, 3)))
+
+# 앞 예제에서 학습한 lr_reg, ridge_reg, lasso_reg 모델의 CV RMSE값 출력           
+models = [lr_reg, ridge_reg, lasso_reg]
+get_avg_rmse_cv(models)
+
+
+# 하이퍼 파라미터 튜닝
+from sklearn.model_selection import GridSearchCV
+
+def print_best_params(model, params):
+    grid_model = GridSearchCV(model, param_grid=params, 
+                              scoring='neg_mean_squared_error', cv=5)
+    grid_model.fit(X_features, y_target_log)
+    rmse = np.sqrt(-1* grid_model.best_score_)
+    print('{0} 5 CV 시 최적 평균 RMSE 값: {1}, 최적 alpha:{2}'.format(
+                                        model.__class__.__name__,
+                                np.round(rmse, 4), grid_model.best_params_))
+    return grid_model.best_estimator_
+
+ridge_params = { 'alpha':[0.05, 0.1, 1, 5, 8, 10, 12, 15, 20] }
+lasso_params = { 'alpha':[0.001, 0.005, 0.008, 0.05, 0.03,
+                                  0.1, 0.5, 1,5, 10] }
+
+best_rige = print_best_params(ridge_reg, ridge_params)
+best_lasso = print_best_params(lasso_reg, lasso_params)
+
+#모델 수행
+from sklearn.linear_model import Ridge,Lasso
+
+# LinearRegression, Ridge, Lasso 학습, 예측, 평가
+
+lr_reg = LinearRegression()
+lr_reg.fit(X_train, y_train)
+
+ridge_reg = Ridge(alpha=12)
+ridge_reg.fit(X_train, y_train)
+
+lasso_reg = Lasso(alpha=0.001)
+lasso_reg.fit(X_train, y_train)
+
+models = [lr_reg, ridge_reg, lasso_reg]
+
+for i_num, model in enumerate(models):
+    get_model_predict(model,X_train, X_test, y_train, y_test,True)        
+    
+    
+# Feature 분포도 및 이상치 데이터 처리 후
+from scipy.stats import skew
+
+numerical_feature = list(set(df_train.columns) - set(category_feature) - 
+                                     set(['Id', 'SalePrice']))
+
+# data[numerical_feature].skew()
+skew_features = df_train[numerical_feature].apply(lambda x : skew(x))
+'''
+skew(왜곡)정도가 1이상인 칼럼만 추출
+'''
+skew_features_top = skew_features[skew_features > 1]
+skew_features_top.sort_values(ascending=False)
+
+from scipy.stats import skew
+
+# data[numerical_feature].skew()
+skew_features_test = df_test[numerical_feature].apply(lambda x : skew(x))
+'''
+skew(왜곡)정도가 1이상인 칼럼만 추출
+'''
+skew_features_test_top = skew_features_test[skew_features_test > 1]
+skew_features_test_top.sort_values(ascending=False)
+
+df_train[skew_features_top.index] = np.log1p(df_train[skew_features_top.index])
+df_test[skew_features_test_top.index] = 
+                                np.log1p(df_test[skew_features_test_top.index])
+    
+X_features = df_train_ohe_df.drop(['SalePrice'], axis=1)
+
+X_train, X_test, y_train,y_test = train_test_split(X_features,
+                                y_target_log,test_size=0.3, random_state=123)
+
+ridge_params = { 'alpha':[0.05, 0.1, 1, 5, 8, 10, 12, 15, 20] }
+lasso_params = { 'alpha':[0.001, 0.005, 0.008, 0.05, 0.03,
+                          0.1, 0.5, 1,5, 10] }
+
+best_rige = print_best_params(ridge_reg, ridge_params)
+best_lasso = print_best_params(lasso_reg, lasso_params)    
+
+
+#
+
+from xgboost import XGBRegressor
+xgb_param ={'n_estimators':[1000]}
+
+xgb_reg = XGBRegressor(n_estimators =1000,learning_rate =0.05, 
+                       colsample_bytree=0.5, subsample=0.8)
+best_xgb = print_best_params(xgb_reg,xgb_param)
+
+from lightgbm import LGBMRegressor
+lgb_param ={'n_estimators':[1000]}
+lgb_reg = LGBMRegressor(n_estimators =1000,learning_rate =0.05,
+                        num_leaves=4, colsample_bytree=0.4, 
+                        subsample=0.6, reg_lambda=10, n_jobs=-1)
+best_lgbm = print_best_params(lgb_reg,lgb_param)
+
+# 모델의 중요도 상위 20개의 피처명과 그때의 중요도값을 Series로 반환.
+def get_top_features(model):
+    ftr_importances_values = model.feature_importances_
+    ftr_importances = pd.Series(ftr_importances_values, index=X_features.columns  )
+    ftr_top20 = ftr_importances.sort_values(ascending=False)[:20]
+    return ftr_top20
+
+def visualize_ftr_importances(models):
+    # 2개 회귀 모델의 시각화를 위해 2개의 컬럼을 가지는 subplot 생성
+    fig, axs = plt.subplots(figsize=(24,10),nrows=1, ncols=2)
+    fig.tight_layout() 
+    # 입력인자로 받은 list객체인 models에서 차례로 model을 추출하여 피처 중요도 시각화. 
+    for i_num, model in enumerate(models):
+        # 중요도 상위 20개의 피처명과 그때의 중요도값 추출 
+        ftr_top20 = get_top_features(model)
+        axs[i_num].set_title(model.__class__.__name__+' Feature Importances', size=25)
+        #font 크기 조정.
+        for label in (axs[i_num].get_xticklabels() + axs[i_num].get_yticklabels()):
+            label.set_fontsize(22)
+        sns.barplot(x=ftr_top20.values, y=ftr_top20.index , ax=axs[i_num])
+
+# 앞 예제에서 print_best_params( )가 반환한 GridSearchCV로 최적화된 모델의 피처 중요도 시각화    
+models = [best_xgb, best_lgbm]
+visualize_ftr_importances(models)
+
+
+# 회귀 모델의 예측 결과 혼합을 통한 최종 예측
+# MSE, RMSE, RMSLE 를 모두 계산 
+def evaluate_regr(y,pred, is_expm1=False):
+    if is_expm1 :
+        y = np.expm1(y)
+        pred = np.expm1(pred)
+        
+    rmsle_val = rmsle(y,pred)
+    rmse_val = rmse(y,pred)
+    # MAE 는 scikit learn의 mean_absolute_error() 로 계산
+    mae_val = mean_absolute_error(y,pred)
+    mse = mean_squared_error(y,pred)
+    mape = mean_absolute_percentage_error(y,pred)
+    r2 = r2_score(y,pred)
+    print('RMSLE: {0:.3f}, RMSE: {1:.3F}, MAE: {2:.3F}'.
+                                    format(rmsle_val, rmse_val, mae_val))
+    print('MSE :{0:.3F}, MAPE :{1:.3F}, R2 :{2:.3F}  '.
+                                      format(mse, mape, r2))   
+
+# 개별 모델의 학습
+ridge_reg = Ridge(alpha=8)
+ridge_reg.fit(X_train, y_train)
+lasso_reg = Lasso(alpha=0.001)
+lasso_reg.fit(X_train, y_train)
+# 개별 모델 예측
+ridge_pred = ridge_reg.predict(X_test)
+lasso_pred = lasso_reg.predict(X_test)
+
+# 개별 모델 예측값 혼합으로 최종 예측값 도출
+pred = 0.5 * ridge_pred + 0.5 * lasso_pred
+preds = {'최종 혼합': pred,
+         'Ridge': ridge_pred,
+         'Lasso': lasso_pred}
+#최종 혼합 모델, 개별모델의 RMSE 값 출력
+evaluate_regr(y_test, pred,True)    
