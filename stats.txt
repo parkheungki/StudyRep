@@ -1,0 +1,326 @@
+import scipy.stats as stats
+
+def f_test(x, y, alt="two_sided"):
+    """
+    Calculates the F-test.
+    :param x: The first group of data
+    :param y: The second group of data
+    :param alt: The alternative hypothesis, one of "two_sided" (default), "greater" or "less"
+    :return: a tuple with the F statistic value and the p-value.
+    """
+    df1 = len(x) - 1
+    df2 = len(y) - 1
+    f = x.var(ddof=1) / y.var(ddof=1)
+    if alt == "greater":
+        p = 1.0 - stats.f.cdf(f, df1, df2)
+    elif alt == "less":
+        p = stats.f.cdf(f, df1, df2)
+    else:
+        # two-sided by default
+        # Crawley, the R book, p.355
+        p = 2.0*(1.0 - stats.f.cdf(f, df1, df2))
+    return f, p
+	
+
+####### 정규성#### 
+# 모집단의 정규성 검정
+from matplotlib import pyplot as plt
+from scipy.stats import shapiro, probplot, zscore #n이 5000이하일 때 사용
+
+fig, axes = plt.subplots(1,2)
+for ax, data, title in zip(axes, [first_grade, second_grade],
+                           ['1st grade', '2nd grade']):
+    ax.hist(data)
+    stat, p = shapiro(data) #H0: 정규성과 차이가 없다
+    ax.set_title("{}\n(shapiro {:.2f}, {:.2f})".format(title, stat, p))
+ 
+fig, axes = plt.subplots(1,2)
+for ax, data in zip(axes, [first_grade, second_grade]):
+    score = zscore(data)
+    probplot(score, plot=ax)
+    
+plt.show()
+#histogram, shapiro 검정, QQplot을 통해 두 데이터 모두 정규성을 따른다.
+
+
+
+### 모평균의 신뢰구간(모분산을 모르는 경우)
+
+\begin{align*} 
+\mathsf{\text{Confidence Interval (t-score)} = \left[ \bar{x} - t_{\alpha/2} \times \frac{s}{\sqrt{n}}, \bar{x}+t_{\alpha/2} \times \frac{s}{\sqrt{n}} \right]}
+\end{align*}
+
+
+#########################################################################
+단일 모비율 검정
+
+$\hat p \pm z_{\alpha/2}\sqrt{\frac{\hat p(1-\hat p)}{n}}$
+
+
+$Z = \frac{\hat p - p_0}{\sqrt{p_0(1-p_0)/n}} \sim N(0, 1) \text{ under } H_0$
+
+## 단일 모분산에 대한 추론
+### 모분산에 대한 신뢰구간
+
+<font size="5">$[\frac{(n-1)s^2}{\chi_{a/2}(n-1)}, \frac{(n-1)s^2}{\chi_{1-a/2}(n-1)}]$</font>
+<font size="5">$[\frac{(n-1)s^2}{\chi_{0.025}(n-1)}, \frac{(n-1)s^2}{\chi_{0.975}(n-1)}]$</font>
+
+### 모분산에 대한 가설 검정
+
+<font size="5">검정통계량 $\chi^2 = \frac{(n-1)s^2}{\sigma^2} \sim \chi(n-1)$</font>
+
+귀무가설 <font size="5">$H_0:~\sigma^2 = \sigma^2_0$</font>
+
+검정통계량 <font size="5">$ \chi^2 _0 = \frac{(n-1)S^2}{\sigma_0^2} = \frac{\sum ^n _{i=1} (X_i - \overline X)^2}{\sigma_0^2}$</font>
+
+<font size="5">$ H_1 :~\sigma^2 > \sigma_0^2 \Rightarrow 기각역:  \chi_0^2 > \chi^2_{1-\alpha;n-1}$</font>
+
+<font size="5">$ H_1 :~\sigma^2 < \sigma_0^2 \Rightarrow 기각역:  \chi_0^2 < \chi^2_{1-\alpha;n-1}$</font>
+
+<font size="5">$ H_1 :~\sigma^2 \neq \sigma_0^2 \Rightarrow 기각역:  \chi_0^2 > \chi^2_{1-\alpha;n-1}, 혹은  \chi_0^2 < \chi^2_{1-\alpha;n-1}$</font>
+#########################################################################
+
+def chi_var_test(s, ss, n, alternative='two-sided'):
+    # s 모분산
+    # ss 표본분산
+    # n 표본 개수  
+    df = n - 1
+    
+    chi_stat = (n-1) * ss / s
+    temp = stats.chi2.cdf(chi_stat, df)
+    if alternative == 'two-sided':
+        pval = 2*(1-temp) if temp > 0.5 else 2*temp
+    elif alternative == 'greater':
+        pval = 1 - temp
+    elif alternative == 'less':
+        pval = temp
+    else:
+        print("ERROR")
+        
+    return chi_stat, pval
+
+chi_var_test(s, ss, n)	
+
+#########################################################################
+두 모평균 차이의 신뢰구간 구하는 법
+$((\bar{X} - \bar{Y}) - z_{\alpha/2} \times \sqrt{\frac{s^2_{1}}{n_{1}}+\frac{s^2_{2}}{n_{2}}},\  (\bar{X} - \bar{Y}) + z_{\alpha/2} \times \sqrt{\frac{s^2_{1}}{n_{1}}+\frac{s^2_{2}}{n_{2}}})$
+또는 
+$(\bar{X} - \bar{Y}) \pm  z_{\alpha/2} \times \sqrt{\frac{s^2_{1}}{n_{1}}+\frac{s^2_{2}}{n_{2}}}$
+
+두 모평균 차이의 검정 
+
+$H_{0}\ :\ \mu_{1}-\mu_{2}=\delta_{0}$
+
+$Z = \frac{(\bar{X}-\bar{Y})-\delta_{0}}{\sqrt{s^2_{1}/n_{1}+s^2_{2}/n_{2}}}$
+
+$H_{1}\ :\ \mu_{1}-\mu_{2}<\delta_{0} 일 때 \quad R\ :\ Z \le -z_{\alpha}$
+
+$H_{1}\ :\ \mu_{1}-\mu_{2}>\delta_{0} 일 때 \quad R\ :\ Z \ge z_{\alpha}$
+
+$H_{1}\ :\ \mu_{1}-\mu_{2} \ne \delta_{0} 일 때 \quad R\ :\ \left| Z \right| \ge z_{\alpha/2}$
+
+#########################################################################
+두 모평균 차이의 검정
+$\sigma^2$의 합동 추정량
+
+$s^2_{p} = \frac{\sum_{i=1}^{n_{1}} (X_{i}-\bar{X})^2 + \sum_{i=1}^{n_{2}} (Y_{i}-\bar{Y})^2}{n_{1} + n_{2} - 2} = \frac{(n_{1} - 1)s_{1}^2 + (n_{2} - 1)s_{2}^2}{n_{1} + n_{2} - 2}$
+
+신뢰구간
+
+$(\bar{X} - \bar{Y}) \pm t_{\alpha/2}(n_{1} + n_{2} - 2) \times s_{p} \sqrt{\frac{1}{n_{1}} + \frac{1}{n_{2}}}$
+
+가설 검정
+
+$t = \frac{(\bar{X} - \bar{Y}) - (\mu_{1} - \mu_{2})}{s_{p} \sqrt{\frac{1}{n_{1}} + \frac{1}{n_{2}}}} \sim t(n_{1} + n_{2} - 2)$
+
+#########################################################################
+대응 표본 
+
+$\bar{D} = \frac{1}{n} \sum_{i=1}^n D_{i}, s_{D}^2 = \frac{\sum_{i=1}^n (D_{i} - \bar{D})^2}{n-1}$
+
+신뢰구간 
+
+$\bar{D} \pm t_{\alpha/2}(n-1) \times s_{D}/\sqrt{n}$
+
+검정 통계량 
+
+$t = \frac{\bar{D}-\delta_{0}}{s_{D}/\sqrt{n}}$
+
+#########################################################################
+두 모비율 검정
+
+검정 
+
+$Z = \frac{\hat{p_1}-\hat{p_2}}{\sqrt{\hat{p}(1-\hat{p})(\frac{1}{n_1}+\frac{1}{n_2})}}, \hat{p} = \frac{X_1+X_2}{n_1+n_2}$
+
+신뢰구간 
+
+$\hat p_1- \hat p_2 \pm z_{\alpha/2} \sqrt{\frac{\hat p_1(1-\hat p_1)}{n_1}+\frac{\hat p_2(1-\hat p_2)}{n_2}}$
+#########################################################################
+
+두 모분산 차이의 가설 검정
+
+<font size="5" color="red">$\left[ \frac{S^2_1/S^2_2}{F_{1-a/2;(n_1-1,n_2-1)}},  \frac{S^2_1/S^2_2}{F_{a/2;(n_1-1,n_2-1)}}   \right]$</font>
+검정 통계량 
+$F = \frac{ \left( \frac{S_1^2}{\sigma_1^2} \right) } { \left( \frac{S_2^2}{\sigma_2^2} \right) }$
+
+#########################################################################
+상관계수 
+
+$r =\frac{\sum ^n _{i=1}(x_i - \bar{x})(y_i - \bar{y})}{\sqrt{\sum ^n _{i=1}(x_i - \bar{x})^2} \sqrt{\sum ^n _{i=1}(y_i - \bar{y})^2}}$
+
+검정 통계량 
+
+$T = r\sqrt{\frac{n-2}{1-r^2}} \sim t(n-2) \text{ under } H_0 \text{ is true}.$
+
+
+############################################
+# 다변량 분산 분석(MANOVA)
+
+다변량 분산분석(MANOVA:Multivariate  Analysis of Variance)은 단일별량분산분석과 달리 종속변수가 2개 이상인 경우 집단간의 평균차이를 비교하기 위한 분석 기법이다.  
+
+즉, 다수의 종속변수들에서 집단 간의 차이가 있는지를 검증하는 기법이다. MANOVA는 종속변수끼리 서로 약한 상관관계가 있을 때 사용하는 모델이지만, 강한 상관관계가 있다면 다중공선성의 위험성이 있다. 종속변수가 많지만 서로 독립이라면 종속변수의 개수만큼 ANOVA 분석을 실시하면 된다.
+
+다변량 분산 분석 기본가정
+ - 관측값이 서로 독립적이다
+ - 모든 종속변수가 다변량의 정규분포를 따른다.  
+     - Mardia 방법, Henze-Zirkler 방법, Royston 방법, Doornik-Hansen’s MVN test
+     - 여기에서는 Henze-Zirkler 방법수행
+     - *참고) 다변량 중심 극한 정리에 따라 독립 변수와 종속 변수의 각 조합에 대해 표본 크기가 큰 경우(예: n > 20) 다변량 정규성을 가정할 수 있습니다.
+ - 각 집단의 분산 공분산 행렬이 동일하다   
+     - Box's m 검정 사용
+     - Box's m 두개 이상의 집단에 공변량 행렬이 동질한지 여부를 판단. 단점은 정규성에 상당히 민감
+     - 기본적인 테스트 검정 가정은 데이터는 다변량 정규를 따른다 이다. 그래서 표본이 정규성 가정을 충족하지 않은 경우 이 검정을 사용하면 안된다. 
+     - 소표본에서 검정력이 상당히 낮다 
+     - 때문에 유의 수준이 a 값이 0.001이다. 
+     
+ - 종속변수들 간의 상관정도가 너무 낮거나 높지 않아야 한다
+     - 종속변수들 간의 상관계수를 구한다.
+
+
+ - H0 (귀무가설)= 공장 종류에 따른 높이와 캐노피 면적이 차이가 없다.  
+    
+ - H1 (연구가설)= 공장 종류에 따른 높이와 캐노피 면적이 차이가 있다.     
+ 
+#import necessary packages
+from pingouin import multivariate_normality
+import pandas as pd
+import numpy as np
+
+'''
+1. 다변량 정규분포를 따르지 않는다
+'''
+#perform the Henze-Zirkler Multivariate Normality Test
+multivariate_normality(df[['height','canopy_vol']], alpha=.05) 
+
+from scipy import stats
+groupd = df.groupby('plant_var')
+fig = plt.figure(figsize=(20,5))
+
+for i, group in enumerate(groupd):
+    ax1 = fig.add_subplot(1,len(groupd),i+1)
+    stats.probplot(group[1]['height'], dist=stats.norm, plot=ax1)
+plt.show()
+
+fig = plt.figure(figsize=(20,5))
+for i, group in enumerate(groupd):
+    ax1 = fig.add_subplot(1,len(groupd),i+1)
+    stats.probplot(group[1]['canopy_vol'], dist=stats.norm, plot=ax1)    
+    
+'''
+각 집단의 분산 공분산 행렬이 동일하다
+'''
+import pingouin as pg
+pg.box_m(df, dvs=['height', 'canopy_vol'], group='plant_var')
+
+import scikit_posthocs
+import numpy as np
+print(np.round(scikit_posthocs.posthoc_scheffe(df, val_col='height', 
+                                group_col='plant_var', sort=True),3))
+print("---" * 20)
+print(np.round(scikit_posthocs.posthoc_scheffe(df, val_col='canopy_vol', 
+                                group_col='plant_var', sort=True),3))
+print("---" * 20)
+print(pd.pivot_table(df, index='plant_var', values='height', 
+                                         aggfunc=np.mean))
+print("---" * 20)
+print(pd.pivot_table(df, index='plant_var', values='canopy_vol', 
+                                         aggfunc=np.mean))
+print("---" * 20)
+
+
+###선형 판별 분석을 통한 시각화
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as lda
+X = df[["height", "canopy_vol"]]
+y = df["plant_var"]
+post_hoc = lda().fit(X=X, y=y)
+X_new = pd.DataFrame(lda().fit(X=X, y=y).transform(X), 
+                                     columns=["lda1", "lda2"])
+X_new["plant_var"] = df["plant_var"]
+sns.scatterplot(data=X_new, x="lda1", y="lda2", hue=df.plant_var.tolist())
+plt.show()
+
+
+
+####################################################
+ANCOVA 공분산 분석
+
+#https://www.reneshbedre.com/blog/ancova.html
+import pandas as pd
+df=pd.read_csv("./ancova_data.csv")
+df.head(2)
+df.groupby('genotype')['yield'].agg(['count','mean', 'std'])
+df.groupby('genotype')['height'].agg(['count','mean', 'std'])
+
+import seaborn as sns
+import matplotlib.pyplot as plt
+fig, axs = plt.subplots(ncols=3)
+sns.scatterplot(data=df, x="height", y="yield", hue=df.genotype.tolist(), ax=axs[0])
+sns.boxplot(data=df, x="genotype", y="yield", hue=df.genotype.tolist(), ax=axs[1])
+sns.boxplot(data=df, x="genotype", y="height", hue=df.genotype.tolist(), ax=axs[2])
+plt.show()
+
+from pingouin import ancova
+ancova(data=df, dv='yield', covar='height', between='genotype')
+
+df['yield2'] = df['yield'] 
+df =df.drop('yield', axis = 1)
+
+# 정규성 검정
+from statsmodels.formula.api import ols
+from statsmodels.stats.anova import anova_lm
+
+formula = 'yield2 ~ C(genotype) + height'
+lm = ols(formula, df).fit()
+print(anova_lm(lm))
+# lm.resid
+import scipy.stats as stats
+stats.shapiro(lm.resid)
+
+# 분산의 동질성 가정
+import pandas as pd
+from scipy.stats import bartlett
+import pingouin as pg
+
+# Bartlett's test in Python with pingouin:
+pg.homoscedasticity(df, dv='yield2', 
+                    group='genotype',
+                   method='bartlett')
+
+#회귀 기울기의 동질성 가정(공변량 계수) 
+from statsmodels.formula.api import ols
+from statsmodels.stats.anova import anova_lm
+
+formula = 'yield2 ~ C(genotype) * height'
+lm = ols(formula, df).fit()
+print(anova_lm(lm, typ = 3 ))
+####################################################
+
+
+
+
+
+
+
+
+
