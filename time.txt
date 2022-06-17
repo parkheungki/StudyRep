@@ -1,0 +1,910 @@
+
+############################################# 시계열 분석 정리
+#series.plot()
+
+def plot_rolling(data, interval):
+    
+    rolmean = data.rolling(interval).mean()
+    rolstd = data.rolling(interval).std()
+    
+    #Plot rolling statistics:
+    plt.figure(figsize=(10, 6))
+    plt.xlabel('Date')
+    orig = plt.plot(data, color='blue',label='Original')
+    mean = plt.plot(rolmean, color='red', label='Rolling Mean')
+    std = plt.plot(rolstd, color='black', label = 'Rolling Std')
+    plt.legend(loc='best')
+    plt.show()
+    
+plot_rolling(series, 30)
+
+from statsmodels.tsa.arima.model import ARIMA
+import warnings
+warnings.filterwarnings('ignore')
+
+def my_auto_arima(data, order,sort = 'AIC'):
+    order_list = []
+    aic_list = []
+    bic_lsit = []
+    d = order[1]
+    for p in range(order[0]):        
+        for q in range(order[2]):
+            model = ARIMA(data, order=(p,d,q))
+            try:
+                model_fit = model.fit()
+                c_order = f'p{p} d{d} q{q}'
+                aic = model_fit.aic
+                bic = model_fit.bic
+                order_list.append(c_order)
+                aic_list.append(aic)
+                bic_list.append(bic)
+            except:
+                pass
+    result_df = pd.DataFrame(list(zip(order_list, aic_list)),columns=['order','AIC'])
+    result_df.sort_values(sort, inplace=True)
+    return result_df
+
+
+target_test = target_log_diff.iloc[-10:]
+target_train = target_log_diff.iloc[:-10]
+
+import pmdarima as pm
+model = pm.auto_arima(y = target_train        # 데이터
+                      , d = 0            # 차분 차수, ndiffs 결과!
+                      , start_p = 0 
+                      , max_p = 5   
+                      , start_q = 0 
+                      , max_q = 3   
+                      , m = 1       
+                      , seasonal = False # 계절성 ARIMA가 아니라면 필수!
+                      , stepwise = True
+                      , trace=True
+                      )	
+
+from statsmodels.tsa.arima.model import ARIMA
+ari_model = ARIMA(target_train, order = (5, 0, 3))
+air_fit = ari_model.fit()
+print(air_fit.summary())	
+
+forecast = []
+ 
+# v4, v3, v2, v1 = target_train.iloc[-4:] # 끝 시점의 네개의 데이터
+v2, v1 = target_log[target_train.index[-2:]] # 끝 시점의 네개의 데이터
+ 
+for i in pred.values:    
+    newval = i + 2*v1 - v2
+    print(i , np.expm1(newval))
+    forecast.append(newval)
+    v2, v1 =v1,newval			
+
+## 조건수(Condition Number)
+데이터 분석의 공통적인 목표 : Train과 Test Data의 예측 성능을 높이는 것
+하지만, 실질적으로 Train과 Test 데이터의 예측 성능을 동시에 올리는 것이 쉽지 않다.  
+(Train을 과도하게 학습하면 Overfitting이 발생하기 때문이다. )  
+하지만, 최종적으로 우리가 높여야 할 성능 1순위는 Test Data의 예측 성능이다. 그렇다면,Train의 성능을 조금 희생하더라도 Test의 성능이 더 잘 나올수 있도록 하는 방향으로 분석을 진행해야 한다.
+
+이러한 방향으로 데이터 분석을 진행하는 데에, 조건수(Condition Number)라는 개념이 사용된다.   
+
+조건수의 감소 목적 :
+
+비수학적인 이해 :  
+독립변수들의 절대적 수치크기나 서로간의 의존도가 분석결과에 미치는 영향을 줄이고, 독립변수의 상대적인 비교효과 반영
+
+수학적 이해 :  
+공분산 행렬의 변동성을 줄여 분석 결과의 변동을 줄인다.
+
+### 조건수를 낮추는 방법   
+1. 변수들 단위차이를 없애주는 Scaling
+2. 독립 변수들 간 상관관계가 높은 '다중공선성'을 제거 (VIF, PCA 등의 방법을 이용)
+3. 독립 변수들 간 의존성이 높은 변수들에 페널티를 부과하는 방식	
+
+#### Scaling  
+1. Standard Scaler
+2. Min-Max Scaler
+3. Robust Scaler 
+
+등등이 있지..
+
+#### 다중 공선성 제거   
+
+다중 공선성은 회귀 분석에서 등장하는 단어로, 수리적으로는 어떤 독립 변수(X의 특정 column)가 다른 독립 변수 들과 완벽한 선형 독립이 아닌 경우를 의미한다. 
+
+일반적으로 데이터 분석에서 다중 공선성의 의미는 회귀 분석에서 사용된 모형의 일부 설명 변수가 다른 설명 변수와 상관정도가 높아 데이터 분석시 부정적인 영향을 미치는 경우를 의미한다. 
+
+다중 공선성  → 독립 변수 공분산 행렬의 조건수 증가 → 과적합
+
+- 상관관계가 매우 높은 독립변수들이 동시에 모델에 포함될 때 발생
+- 만약 두 변수가 완벽하게 다중공선성에 걸려있으면, 같은 변수를 두번넣은 것이며 최소제곱법을 계산하는 것이 어렵다.
+- 완벽한 다중공선성이 아니더라도 다중공선성이 높다면 회귀계수의 표준오차가 비정상적으로 커지게된다.
+- 회귀계수의 유의성은 t-값에 의해 계산되는데(회귀계수 / 표준오차) 다중공선성으로 인해 표준오차가 비정상적으로 커지면 t값이 작아져서 p값이 유의해지지 않아 유의해야할 변수가 유의하지 않게됨.
+
+다중 공선성은 언제 발생할까? 
+
+- 독립 변수의 일부가 다른 독립 변수의 조합으로 표현이 가능한 경우
+- 독립 변수들이 서로 독립이지 않고, 상호 상관 관계가 강한 경우
+- 독립 변수의 공분산 행렬 벡터 공간의 차원과 독립 변수의 차원이 같지 않은 경우 
+
+위의 세가지 표현은 수리적으로 다중 공선성이 발생하는 경우를 기술한 것이고, 우리가 쉽게 이해를 하는데에는 데이터의 특성들이 독립된 관계를 가지지 않고, 서로 연관성이 강하다는 점을 알고 있으면 이해하기 쉽다. 
+
+다중공선성 확인  
+1. 산포도 및 상관계수 확인
+- 두 독립변수의 산포도를 보았을 때, 상관관계가 너무 높으면 다중공선성이 있다고 판단
+- 상관계수가 0,9를 넘는다면(높다면) 다중공선성의 문제가 있다고 할 수 있음
+
+2. 허용/공차(tolerance)를 확인
+- tolerance란 한개의 독립변수를 종속변수로 나머지 독립변수를 독립변수로 하는 회귀분석을 했을 때 나오는 R-squared값을 이용, 1-R^2 를 의미한다.
+- 만약 R^2가 1이면 독립변수 간에 심각한 상관관계가 있다는 것을 의미하며, tolerance는 이 경우에 0이 될 것이다.
+- 따라서 tolerance가 0이면 완벽한 상관성을 의미하며 다중공선성이 심각하다는 것을 의미한다.
+
+3. 분산팽창지수(VIF : Variance Inflation Factor)
+- VIF = 1 / tolerance = 1 / (1 - R^2)
+- VIF가 크다는 것은 다중공선성이 크다는 의미
+- 일반적으로 10보다 크면 문제가 있다고 판단
+- 이는 연속형 변수의 경우에 해당된다고 보아야 함
+- 만약 더미변수의 VIF가 3이상이라면 이 경우 다중공선성을 의심해 보아야함
+
+4. 상태지수(Condition Index)
+- 100이상이면 심각한 다중공선성이 있다고 판단
+- 거의 잘 사용하지 않음
+
+
+다중 공선성을 줄이는 방법 
+1. VIF (Variance Inflation Factor)  
+독립성이 강한 특정 개수의 X 피처를 선택하여 그것만 분석에 사용하는 기법 
+즉, 다른 column들의 선형 조합으로 표현이 가능한 column을 배제하고, 나머지 column들만 분석에 사용하는 기법이다. 
+
+독립성을 판단하는 기준 
+- 독립 변수를 다른 독립 변수들로 선형회귀한 성능을 비교하여 상호 의존적인 독립 변수를 제거한다.
+  예를 들어 한가지 특성을 나머지 특성들의 선형 회귀한 결과로 성능 지표를 나타내었을 때, 성능이 좋게 나온 것이 "의존성이 강하다"라고 판단을 할 수 있다. (이 경우에 성능 지표로 R-Square 수치를 이용한다.)
+  
+2. PCA (PCA = Principal Component Analysis)  
+데이터를 가장 잘 나타낼 수 있는 차원과 축을 정해서 해당 축을 각 X의 column으로 지정하는 것.
+
+3. 능형 회귀분석(Ridge)
+
+보통 VIF가 10이 넘으면 다중공선성이 있다고 판단한다.
+
+###########################################################
+import numpy as np
+from statsmodels.tsa.api import SimpleExpSmoothing 
+
+def ses(y, y_to_train,y_to_test,smoothing_level,predict_date):    
+    
+    y.plot(marker='o', color='black', legend=True, figsize=(20, 7))
+    
+    fit1 = SimpleExpSmoothing(y_to_train).fit(smoothing_level=smoothing_level,optimized=False)
+    fcast1 = fit1.forecast(predict_date).rename(r'$\alpha={}$'.format(smoothing_level))
+    # specific smoothing level
+    fcast1.plot(marker='o', color='blue', legend=True)
+    fit1.fittedvalues.plot(marker='o',  color='blue')
+    mse1 = ((fcast1.values - y_to_test.values) ** 2).mean()
+    print('The Root Mean Squared Error of our forecasts with smoothing level of {} is {}'.format(smoothing_level,round(np.sqrt(mse1), 2)))
+    
+    ## auto optimization
+    fit2 = SimpleExpSmoothing(y_to_train).fit()
+    fcast2 = fit2.forecast(predict_date).rename(r'$\alpha=%s$'%fit2.model.params['smoothing_level'])
+    # plot
+    fcast2.plot(marker='o', color='green', legend=True)
+    fit2.fittedvalues.plot(marker='o', color='green')
+    
+    mse2 = ((fcast2.values - y_to_test.values) ** 2).mean()
+    print('The Root Mean Squared Error of our forecasts with auto optimization is {}'.format(round(np.sqrt(mse2), 2)))
+    
+    plt.show()
+    
+ses(temp, train,test,0.01,predict_date)    
+
+# Simple Exponential Smoothing
+model = SimpleExpSmoothing(train['Temp']).fit(smoothing_level=0.5) # 단순지수평활 모델 생성
+test['SES'] = model.forecast(365) # 365일의 데이터 forecast
+
+# 결과 plot
+plt.figure(figsize=(12,4))
+sns.set_style('whitegrid')
+
+sns.lineplot(data=test, x='Date', y='Temp', color='silver')
+sns.lineplot(data=test, x='Date', y='SES', color='red', label= 'SES predicted')
+plt.title('Temperatures - SES', fontsize=15)
+plt.show()
+
+
+########################################################
+import warnings
+warnings.filterwarnings('ignore')
+
+df_train = df.iloc[:-12]
+df_test = df.iloc[-12:]
+
+## exponential smoothing in Python
+from statsmodels.tsa.api import ExponentialSmoothing, SimpleExpSmoothing, Holt
+
+# Simple Exponential Smoothing
+fit1 = SimpleExpSmoothing(df_train, 
+                          initialization_method="estimated").fit()
+fcast1 = fit1.forecast(len(df_test)).rename("Simple Exponential Smoothing")
+# Trend
+# Holt 선형지수평활법, 이중 지수 평활법 
+# 파라미터가 두개가 필요하다. optimized=False 로 하면 지정해야한다.  a, b (smoothing_level=0.8, smoothing_trend=0.2)
+# 예를들면 fit(smoothing_level=0.8, smoothing_trend=0.2, optimized=False)
+fit2 = Holt(df_train, 
+            initialization_method="estimated").fit()
+fcast2 = fit2.forecast(len(df_test)).rename("Holt's linear trend")
+
+# Exponential trend
+# exponential 파라미터는 가법이냐 승법이냐.
+fit3 = Holt(df_train,
+            exponential=True, 
+            initialization_method="estimated").fit()
+fcast3 = fit3.forecast(len(df_test)).rename("Exponential trend")
+
+# Additive damped trend
+# damped_trend 감쇠추세법
+# 감쇠 추세법이란, 미래의 값을 과하게 예측하는 것을 파라미터(phi값) 조정을 통해 방지하는 기법이다. 
+# 파라미터(phi)값이 1이면 Holt 선형지수평활법과 동일해지고, 일반적으로 0.8 < phi < 1 범위 사이의 값들을 사용한다.
+fit4 = Holt(df_train,
+            damped_trend=True, 
+            initialization_method="estimated").fit(damping_trend=1)
+fcast4 = fit4.forecast(len(df_test)).rename("Additive damped trend")
+
+# Multiplicative damped trend
+fit5 = Holt(df_train,
+            exponential=True, 
+            damped_trend=True, 
+            initialization_method="estimated").fit()
+fcast5 = fit5.forecast(len(df_test)).rename("Multiplicative damped trend")
+
+
+plt.figure(figsize=(12, 8))
+plt.plot(df_train, marker="o", color="black")
+plt.plot(fit1.fittedvalues, color="blue")
+(line1,) = plt.plot(fcast1, marker="o", color="blue")
+plt.plot(fit2.fittedvalues, color="red")
+(line2,) = plt.plot(fcast2, marker="o", color="red")
+plt.plot(fit3.fittedvalues, color="green")
+(line3,) = plt.plot(fcast3, marker="o", color="green")
+plt.plot(fit4.fittedvalues, color="yellow")
+(line4,) = plt.plot(fcast4, marker="o", color="yellow")
+plt.plot(fit5.fittedvalues, color="cyan")
+(line5,) = plt.plot(fcast5, marker="o", color="cyan")
+plt.legend([line1, line2, line3,line4,line5], [fcast1.name, fcast2.name, fcast3.name, fcast4.name, fcast5.name])
+plt.show()
+
+
+## getting all results by models
+params = ['smoothing_level', 'smoothing_trend', 'damping_trend', 'initial_level', 'initial_trend']
+results=pd.DataFrame(index=[r"$\alpha$",r"$\beta$",r"$\phi$",r"$l_0$","$b_0$","SSE"],
+                     columns=['SES', "Holt's","Exponential", "Additive", "Multiplicative"])
+
+results["SES"] =            [fit1.params[p] for p in params] + [fit1.sse]
+results["Holt's"] =         [fit2.params[p] for p in params] + [fit2.sse]
+results["Exponential"] =    [fit3.params[p] for p in params] + [fit3.sse]
+results["Additive"] =       [fit4.params[p] for p in params] + [fit4.sse]
+results["Multiplicative"] = [fit5.params[p] for p in params] + [fit5.sse]
+
+results
+
+## Holt's Winters's method for time series data with Seasonality
+from statsmodels.tsa.holtwinters import ExponentialSmoothing as HWES
+
+# additive model for fixed seasonal variation
+fit6 = HWES(df_train, 
+             seasonal_periods=12, 
+             trend='add', 
+             seasonal='add').fit(optimized=True, use_brute=True)
+
+# multiplicative model for increasing seasonal variation
+fit7 = HWES(df_train, 
+             seasonal_periods=12, 
+             trend='add', 
+             seasonal='mul').fit(optimized=True, use_brute=True)
+			 
+## forecasting for 12 months
+forecast_1 = fit1.forecast(12)
+forecast_2 = fit2.forecast(12)
+forecast_3 = fit3.forecast(12)
+forecast_4 = fit4.forecast(12)
+forecast_5 = fit5.forecast(12)
+forecast_6 = fit6.forecast(12)
+forecast_7 = fit7.forecast(12)			 
+
+y_test = df_test['value']
+
+t_p = pd.DataFrame({'test': y_test, 
+                    'f1': forecast_1, 
+                    'f2': forecast_2, 
+                    'f3': forecast_3, 
+                    'f4': forecast_4, 
+                    'f5': forecast_5, 
+                    'f6': forecast_6, 
+                    'f7': forecast_7})                    
+                    
+t_p.head()
+
+## UDF for counting the number of parameters in model
+def num_params(model):
+    n_params = 0
+    
+    for p in list(model.params.values()):
+        if isinstance(p, np.ndarray):
+            n_params += len(p)
+#             print(p)
+        elif p in [np.nan, False, None]:
+            pass
+        elif np.isnan(float(p)):
+            pass
+        else:
+            n_params += 1
+#             print(p)
+    
+    return n_params
+	
+## evaluation metrics
+from sklearn.metrics import mean_squared_error as MSE
+from sklearn.metrics import mean_absolute_error as MAE
+
+# Mean Absolute Percentage Error
+def SSE(y_test, y_pred):
+    y_test, y_pred = np.array(y_test), np.array(y_pred)
+    return np.sum((y_test - y_pred)**2)
+
+def ME(y_test, y_pred):
+    y_test, y_pred = np.array(y_test), np.array(y_pred)
+    return np.mean(y_test - y_pred)
+
+def RMSE(y_test, y_pred):
+    y_test, y_pred = np.array(y_test), np.array(y_pred)
+    return np.sqrt(np.mean((y_test - y_pred)**2))   
+    #return np.sqrt(MSE(y_test - y_pred))
+
+def MPE(y_test, y_pred): 
+    y_test, y_pred = np.array(y_test), np.array(y_pred)
+    return np.mean((y_test - y_pred) / y_test) * 100
+
+def MAPE(y_test, y_pred): 
+    y_test, y_pred = np.array(y_test), np.array(y_pred)
+    return np.mean(np.abs((y_test - y_pred) / y_test)) * 100
+
+def AIC(y_test, y_pred, T, model):
+    y_test, y_pred = np.array(y_test), np.array(y_pred)
+    sse = np.sum((y_test - y_pred)**2)
+    #T = len(y_train) # number of observations
+    k = num_params(model) # number of parameters
+    return T * np.log(sse/T) + 2*k
+
+def SBC(y_test, y_pred, T, model):
+    y_test, y_pred = np.array(y_test), np.array(y_pred)
+    sse = np.sum((y_test - y_pred)**2)
+    #T = len(y_train) # number of observations
+    k = num_params(model) # number of parameters
+    return T * np.log(sse/T) + k * np.log(T)
+
+def APC(y_test, y_pred, T, model):
+    y_test, y_pred = np.array(y_test), np.array(y_pred)
+    sse = np.sum((y_test - y_pred)**2)
+    #T = len(y_train) # number of observations
+    k = num_params(model) # number of parameters
+    return ((T+k)/(T-k)) * sse / T
+
+def ADJ_R2(y_test, y_pred, T, model):
+    y_test, y_pred = np.array(y_test), np.array(y_pred)
+    sst = np.sum((y_test - np.mean(y_test))**2)
+    sse = np.sum((y_test - y_pred)**2)
+    #T = len(y_train) # number of observations
+    k = num_params(model) # number of parameters
+    r2 = 1 - sse/sst
+    return 1 - ((T - 1)/(T - k)) * (1 - r2)
+    
+
+## Combining all metrics together
+def eval_all(y_test, y_pred, T, model):
+    sse = SSE(y_test, y_pred)
+    mse = MSE(y_test, y_pred)
+    rmse = RMSE(y_test, y_pred)
+    me = ME(y_test, y_pred)
+    mae = MAE(y_test, y_pred)
+    mpe = MPE(y_test, y_pred)
+    mape = MAPE(y_test, y_pred)
+    aic = AIC(y_test, y_pred, T, model)
+    sbc = SBC(y_test, y_pred, T, model)
+    apc = APC(y_test, y_pred, T, model)
+    adj_r2 = ADJ_R2(y_test, y_pred, T, model)
+    
+    return [sse, mse, rmse, me, mae, mpe, mape, aic, sbc, apc, adj_r2]	
+	
+T = df_train.shape[0]
+
+eval_all_df = pd.DataFrame(
+    {'SES': eval_all(y_test, forecast_1, T, fit1), 
+    "Holt's": eval_all(y_test, forecast_2, T, fit2), 
+    'Exponential': eval_all(y_test, forecast_3, T, fit3), 
+    'Trend_Add': eval_all(y_test, forecast_4, T, fit4), 
+    'Trend_Mult': eval_all(y_test, forecast_5, T, fit5), 
+    'Trend_Season_Add': eval_all(y_test, forecast_6, T, fit6), 
+    'Trend_Season_Mult': eval_all(y_test, forecast_7, T, fit7)}
+    , index=['SSE', 'MSE', 'RMSE', 'ME', 'MAE', 'MPE', 'MAPE', 'AIC', 'SBC', 'APC', 'Adj_R2'])
+
+eval_all_df	
+
+# horizontal bar chart
+eval_all_df.loc['MAPE', :].plot(kind='barh', figsize=[8, 6])
+plt.title('Mean Absolute Percentage Error (MAPE)', fontsize=16)
+plt.show()
+
+# 1차 선형 추세는 있고 계절성은 없는 이중 지수 평활법
+plt.rcParams['figure.figsize']=[12, 8]
+past, = plt.plot(df_train.index, df_train, 'b.-', label='Sales History')
+test, = plt.plot(df_test.index, df_test, 'r.-', label='y_test')
+pred, = plt.plot(df_test.index, forecast_4, 'y.-', label='y_pred')
+plt.title('Two Parameter Exponential Smoothing', fontsize=14)
+plt.legend(handles=[past, test, pred])
+plt.show()
+
+# 1차 선형 추세와 확산계절변동이 있는 승법 윈터스 지수평활법
+plt.rcParams['figure.figsize']=[12, 8]
+past, = plt.plot(df_train.index, df_train, 'b.-', label='Sales History')
+test, = plt.plot(df_test.index, df_test, 'r.-', label='y_test')
+pred, = plt.plot(df_test.index, forecast_7, 'y.-', label='y_pred')
+plt.title('Multiplicative Winters Method Exponential Smoothing with Linear Trend', fontsize=14)
+plt.legend(handles=[past, test, pred])
+plt.show()
+
+######################################################################
+해석
+
+<font size="5"><b>auto_arima 후에 할 일: 잔차의 백색 잡음 여부 / 정규성 / 등분산성 확인</b></font>  
+auto_arima의 summary 결과의 Ljung-Box (Q), Jarque-Bera (JB) 등의 검정 통계량을 통해 확인할 수 있고, 혹은 plot_diagnositics() 함수로 잔차를 시각화하여 확인할 수 있습니다.  
+
+ARIMA에서 모형이 잘 적합되었다, 이제 손 떠나도 된다의 기준은 무엇일까요?
+
+바로 모형을 적합하고 남은 잔차 (residuals)가 시간과 무관하게 정상성을 띠면서 (즉, 일정한 평균과 분산을 갖고) 정규성을 만족해야한다는 것입니다. 즉, 아래와 같이 말이죠.
+
+<b>$\epsilon$ ~ $N(0,\sigma^2)$</b>   
+
+이를 위해 auto_arima 적합 후 모형에 대한 summary를 하면 잔차와 관련한 통계량들을 제공합니다. 아래는 실제 모형 적합 후 얻은 표입니다.  
+
+
+이 중 잔차에 관련한 부분은 Ljung-Box (Q) / Heteroskedasticity (H) / Jarque-Bera (JB) 입니다. 그리고 Prob (Q) / Prob (H) / Prob (JB)는 각 검정에 대한 p-value입니다.  
+- Ljung-Box (Q) 융-박스 검정 통계량는 잔차가 백색잡음인지 검정한 통계량입니다. Ljung-Box (Q)에서 Prob (Q) 값을 보면 0.65이므로 유의수준 0.05에서 귀무가설을 기각하지 못합니다. Ljung-Box (Q) 통계량의 귀무가설은 “잔차(residual)가 백색잡음(white noise) 시계열을 따른다”이므로, 결과를 통해 시계열 모형이 잘 적합되었고 남은 잔차는 더이상 자기상관을 가지지 않는 백색 잡음임을 확인할 수 있습니다.
+
+- Heteroskedasticity (H) 이분산성 검정 통계량은 잔차가 이분산을 띠지 않는지 검정한 통계량입니다. 위 Heteroskedasticity (H)에서 Prob (H) 부분을 보면, 0.06으로 귀무가설을 기각하지 못합니다. Heteroskedasticity (H) 통계량의 귀무가설은 “잔차가 이분산을 띠지 않는다”이므로, 위 결과를 통해 “잔차가 이분산성을 보이지 않음”을 확인하실 수 있습니다.
+
+- Jarque-Bera (JB) 자크-베라 검정 통계량은 잔차가 정규성을 띠는지 검정한 통계량입니다. 위 Jarque-Bera (JB)에서 Prob(JB)값을 보면 0.00으로 유의 수준 0.05에서 귀무가설을 기각합니다. Jarque-Bera (JB) 통계량의 귀무가설은 “잔차가 정규성을 만족한다”이므로, 위 결과를 통해 “잔차가 정규성을 따르지 않음”을 확인할 수 있습니다.
+
+- 또한, 잔차가 정규분포를 따른다면 경험적으로 비대칭도 (Skew)는 0에 가까워야 하고 첨도 (Kurtosis)는 3에 가까워야 합니다. 위 Summary 결과를 통해 비대칭도는 0.53으로 0에 가깝지만 첨도는 4.67로 3보다 더 높은 값을 가지고 있음을 알 수 있습니다.
+
+이를 아래와 같이 plot_diagnostics()를 통해 얻은 잔차 그래프로도 확인하실 수 있습니다.  
+
+
+잔차가 백색 잡음을 따르는지 보여주는 플랏은 (1,1)과 (2,2)에 위치한 그림입니다. (1,1)은 잔차를 그냥 시계열로 그린 것이고, (2,2)의 그림은 잔차에 대한 ACF입니다. 백색 잡음의 특성상 시계열이 평균 0을 중심으로 무작위하게 움직이는 것을 볼 수 있고, ACF도 허용 범위 안에 위치함을 알 수 있습니다.  
+
+잔차가 정규성을 만족하는지 보여주는 플랏은 (1,2)와 (2,1)에 위치한 그림입니다. (1,2)는 잔차의 히스토그램을 그려 정규 분포 N(0,1)과 밀도를 추정한 그래프를 같이 겹쳐서 보여줍니다. 위 비대칭도와 첨도에서 확인하셨던 것처럼 정규분포와 비슷한 평균을 갖지만, 첨도가 더 뾰족하게 솟아오른 것을 알 수 있습니다. (2,1)그래프는 Q-Q 플랏으로 정규성을 만족한다면 빨간 일직선 위에 점들이 분포해야 합니다. 그러나, 양 끝 쪽에서 빨간 선을 약간 벗어나는 듯한 모습을 보입니다.  
+
+<font size="4"><b>결과적으로 위 적합 결과를 종합해보면, 잔차는 백색 잡음이지만, 정규성은 따르지 않는다 볼 수 있습니다.</b></font>
+
+<font size="5">자기상관 테스트</font>  
+Ljung–Box test:
+
+- 가설확인
+  - 대중주장(귀무가설, Null Hypothesis, 𝐻0): 시계열 데이터의 Autocorrelation은 0이다(존재하지 않는다)  
+  - 나의주장(대립가설, Alternative Hypothesis, 𝐻1): 시계열 데이터의 Autocorrelation은 0이 아니다(존재한다)  
+  
+- 의사결정
+  - p-value >= 내기준(ex. 0.05): 내가 수집한(분석한) 데이터가 대중주장과 유사하기 때문에 대중주장 참 & 나의주장 거짓
+    내가 수집한(분석한) 시계열 데이터의 Autocorrelation은 존재하지 않는다
+
+  - p-value < 내기준(ex. 0.05): 내가 수집한(분석한) 데이터가 대중주장을 벗어나기 때문에 대중주장 거짓 & 나의주장 참
+    내가 수집한(분석한) 시계열 데이터의 Autocorrelation은 존재한다
+    
+Portmanteau test:
+- 가설확인: Ljung–Box와 동일
+
+Breusch–Godfrey test:
+- 가설확인: Ljung–Box와 동일
+
+Durbin–Watson statistic:
+
+- 가설확인: Ljung–Box와 동일
+- 의사결정: 검정통계량 범위 - [0,4][0,4]
+  - 2 근방: 내가 수집한(분석한) 데이터가 대중주장과 유사하기 때문에 대중주장 참 & 나의주장 거짓  
+    내가 수집한(분석한) 시계열 데이터의 Autocorrelation은 존재하지 않는다
+
+  - 0 또는 4 근방: 내가 수집한(분석한) 데이터가 대중주장을 벗어나기 때문에 대중주장 거짓 & 나의주장 참  
+    내가 수집한(분석한) 시계열 데이터의 Autocorrelation은 존재한다
+
+  - 0: 양(Positive)의 Autocorrelation 존재한다
+  - 4: 음(Negative)의 Autocorrelation 존재한다
+  
+<font size="5">등분산성 테스트</font>  
+Goldfeld–Quandt test:
+
+- 가설확인
+  - 대중주장(귀무가설, Null Hypothesis, 𝐻0H0): 시계열 데이터의 Homoscedasticity 상태다(등분산이다)  
+  - 나의주장(대립가설, Alternative Hypothesis, 𝐻1H1): 시계열 데이터의 Heteroscedasticity 상태다(등분산이 아니다 / 발산하는 분산이다)  
+
+- 의사결정
+   - p-value >= 내기준(ex. 0.05): 내가 수집한(분석한) 데이터가 대중주장과 유사하기 때문에 대중주장 참 & 나의주장 거짓
+     내가 수집한(분석한) 시계열 데이터는 등분산이다
+
+   - p-value < 내기준(ex. 0.05): 내가 수집한(분석한) 데이터가 대중주장을 벗어나기 때문에 대중주장 거짓 & 나의주장 참
+     내가 수집한(분석한) 시계열 데이터는 등분산이 아니다
+
+Breusch–Pagan test:
+- 가설확인: Goldfeld–Quandt와 동일
+
+Bartlett's test:
+- 가설확인: Goldfeld–Quandt와 동일
+
+
+# Call this function after pick the right(p,d,q) for SARIMA based on AIC    
+import numpy as np
+def arima_eva(y,order,pred_date,y_to_test):
+    # fit the model 
+    mod = ARIMA(y,order=order)
+
+    results = mod.fit()
+    print(results.summary())
+    
+    results.plot_diagnostics(figsize=(16, 8))
+    plt.show()
+    
+    # The dynamic=False argument ensures that we produce one-step ahead forecasts, 
+    # meaning that forecasts at each point are generated using the full history up to that point.
+    pred = results.get_prediction(start=pd.to_datetime(pred_date), dynamic=False)
+    pred_ci = pred.conf_int()
+    
+    y_forecasted = pred.predicted_mean
+    mse = ((y_forecasted - y_to_test) ** 2).mean()
+    print('The Root Mean Squared Error {}'.format(round(np.sqrt(mse), 2)))
+
+    ax = y.plot(label='observed')
+    y_forecasted.plot(ax=ax, label='One-step ahead Forecast', alpha=.7, figsize=(14, 7))
+    ax.fill_between(pred_ci.index,
+                    pred_ci.iloc[:, 0],
+                    pred_ci.iloc[:, 1], color='k', alpha=.2)
+
+    ax.set_xlabel('Date')
+    ax.set_ylabel('Sessions')
+    plt.legend()
+    plt.show()
+
+    # A better representation of our true predictive power can be obtained using dynamic forecasts. 
+    # In this case, we only use information from the time series up to a certain point, 
+    # and after that, forecasts are generated using values from previous forecasted time points.
+    pred_dynamic = results.get_prediction(start=pd.to_datetime(pred_date), dynamic=True, full_results=True)
+    pred_dynamic_ci = pred_dynamic.conf_int()
+    y_forecasted_dynamic = pred_dynamic.predicted_mean
+    mse_dynamic = ((y_forecasted_dynamic - y_to_test) ** 2).mean()
+    print('The Root Mean Squared Error dynamic = True {}'.format(round(np.sqrt(mse_dynamic), 2)))
+
+    ax = y.plot(label='observed')
+    y_forecasted_dynamic.plot(label='Dynamic Forecast', ax=ax,figsize=(14, 7))
+    ax.fill_between(pred_dynamic_ci.index,
+                    pred_dynamic_ci.iloc[:, 0],
+                    pred_dynamic_ci.iloc[:, 1], color='k', alpha=.2)
+
+    ax.set_xlabel('Date')
+    ax.set_ylabel('Sessions')
+
+    plt.legend()
+    plt.show()
+    
+    return (results)  
+	
+order = (0, 2, 1)
+model = arima_eva(series['market-price'],order,'2021-01-31',y_test['market-price'])	
+
+
+def forecast(model,predict_steps,y):
+    
+    pred_uc = model.get_forecast(steps=predict_steps)
+
+    #SARIMAXResults.conf_int, can change alpha,the default alpha = .05 returns a 95% confidence interval.
+    pred_ci = pred_uc.conf_int()
+
+    ax = y.plot(label='observed', figsize=(14, 7))
+#     print(pred_uc.predicted_mean)
+    pred_uc.predicted_mean.plot(ax=ax, label='Forecast')
+    ax.fill_between(pred_ci.index,
+                    pred_ci.iloc[:, 0],
+                    pred_ci.iloc[:, 1], color='k', alpha=.25)
+    ax.set_xlabel('Date')
+    ax.set_ylabel(y.name)
+
+    plt.legend()
+    plt.show()
+    
+    # Produce the forcasted tables 
+    pm = pred_uc.predicted_mean.reset_index()
+    pm.columns = ['Date','Predicted_Mean']
+    pci = pred_ci.reset_index()
+    pci.columns = ['Date','Lower Bound','Upper Bound']
+    final_table = pm.join(pci.set_index('Date'), on='Date')
+    
+    return (final_table)
+	
+final_table = forecast(model,10,series['market-price'])
+final_table.head()	
+
+######################################################
+삼성전자 실습
+
+import pandas as pd
+import matplotlib.pyplot as plt
+import numpy as np
+from pmdarima.arima import ndiffs
+import pmdarima as pm
+import itertools
+from statsmodels.tsa.arima.model import ARIMA
+
+ss = pd.read_csv('./samsung.csv')
+ss['Date'] = pd.to_datetime(ss['Date'])
+ss = ss.set_index('Date')
+# ss.index = pd.DatetimeIndex(ss.index,freq='BDay')
+ss.head()
+
+y_train = ss['Close'][:int(0.7*len(ss))]
+y_test = ss['Close'][int(0.7*len(ss)):]
+y_train.plot(figsize=(10, 5))
+y_test.plot()
+plt.show()
+
+kpss_diffs = ndiffs(y_train, alpha=0.05, test='kpss', max_d=6)
+adf_diffs = ndiffs(y_train, alpha=0.05, test='adf', max_d=6)
+n_diffs = max(adf_diffs, kpss_diffs)
+
+print(f"추정된 차수 d = {n_diffs}")
+
+
+model = pm.auto_arima(y = y_train        # 데이터
+                      , d = 1            # 차분 차수, ndiffs 결과!
+                      , start_p = 0 
+                      , max_p = 3   
+                      , start_q = 0 
+                      , max_q = 3   
+                      , m = 1       
+                      , seasonal = False # 계절성 ARIMA가 아니라면 필수!
+                      , stepwise = True
+                      , trace=True
+                      )
+
+print(model.summary())
+
+my_auto_arima , auto_arima 와 동일하게 0,1,0 계수가 나왔다 시험장에서는 비교해가면서 해야 겠찌?
+
+auto_arima 파라미터   
+- y: array 형태의 시계열 자료  
+- d (기본값 = none): 차분의 차수, 이를 지정하지 않으면 실행 기간이 매우 길어질 수 있음  
+- start_p (기본값 = 2), max_p (기본값 = 5): AR(p)를 찾을 범위 (start_p에서 max_p까지 찾는다!)  
+- start_q (기본값 = 2), max_q (기본값 = 5): AR(q)를 찾을 범위 (start_q에서 max_q까지 찾는다!)  
+- m (기본값 = 1): 계절적 차분이 필요할 때 쓸 수 있는 모수로 m=4이면 분기별, m=12면 월별, m=1이면 계절적 특징을 띠지 않는 데이터를 의미한다. m=1이면 자동적으로 seasonal 에 대한 옵션은 False로 지정된다.  
+- seasonal (기본값 = True): 계절성 ARIMA 모형을 적합할지의 여부  
+- stepwise (기본값 = True): 최적의 모수를 찾기 위해 쓰는 힌드만 - 칸다카르 알고리즘을 사용할지의 여부, False면 모든 모수 조합으로 모형을 적합한다.  
+- trace (기본값 = False): stepwise로 모델을 적합할 때마다 결과를 프린트하고 싶을 때 사용한다.  
+
+모형 결과 1차 차분 하였을 경우 $(\epsilon t∼N(0,\sigma^2))$ 임을 의미 하고 결국 아래 식처럼 임의 보행 모형 (Random Walk Model)을 따른다는 것을 알 수 있습니다.  
+<font size="5" color="red">
+$y_t - y_{t-1} = \epsilon t $  
+$y_t  = y_{t-1} + \epsilon t $  
+</font>
+
+<font size="4" >4. 잔차 검정한다</font>
+
+############잔차 검정
+
+from statsmodels.tsa.arima.model import ARIMA
+import warnings
+warnings.filterwarnings('ignore')
+
+model_2 = ARIMA(y_train,order=(0,1,0)).fit()
+print(model_2.summary())
+
+Ljung-Box (Q) / Heteroskedasticity (H) / Jarque-Bera (JB)에 대한 부분은 모두 잔차에 대한 검정 통계량들입니다.  
+ - Ljung-Box (Q) 융-박스 검정 통계량는 잔차가 백색잡음인지 검정한 통계량입니다.  
+ Prob (Q) 값을 보면 0.90이므로 유의수준 0.05에서 귀무가설을 기각하지 못합니다. Ljung-Box (Q) 통계량의 귀무가설은 “잔차(residual)가 백색잡음(white noise) 시계열을 따른다”이므로, 위 결과를 통해 시계열 모형이 잘 적합되었고 남은 잔차는 더이상 자기상관을 가지지 않는 백색 잡음임을 확인할 수 있습니다.
+ - Jarque-Bera (JB) 자크-베라 검정 통계량은 잔차가 정규성을 띠는지 검정한 통계량입니다.  
+ Prob(JB)값을 보면 0.00으로 유의 수준 0.05에서 귀무가설을 기각합니다. Jarque-Bera (JB) 통계량의 귀무가설은 “잔차가 정규성을 만족한다”이므로, 위 결과를 통해 “잔차가 정규성을 따르지 않음”을 확인할 수 있습니다.  
+ - Heteroskedasticity (H) 이분산성 검정 통계량은 잔차가 이분산을 띠지 않는지 검정한 통계량입니다.
+ 
+ - 또한, 잔차가 정규분포를 따른다면, 경험적으로  
+비대칭도 (Skew)는 0에 가까워야 하고
+첨도 (Kurtosis)는 3에 가까워야 합니다.
+
+model_2.plot_diagnostics(figsize=(16, 8))
+plt.show()
+
+잔차가 백색 잡음을 따르는지 보여주는 플랏은 Standardized residual과 Correlogram 그림입니다.
+- Standardized residual은 잔차를 그냥 시계열로 그린 것입니다. 백색 잡음 답게 잔차의 시계열이 평균 0을 중심으로 무작위하게 움직이는 것을 볼 수 있습니다.
+- Correlogram은 잔차에 대한 ACF입니다. ACF도 어느 정도 허용 범위 안에 위치하여 자기상관이 없음을 알 수 있습니다.
+
+잔차가 정규성을 만족하는지 보여주는 플랏은 Histogram plus estimated density와 Normal Q-Q 그림입니다.
+- Histogram plus estimated density는 잔차의 히스토그램을 그려 정규 분포 N(0,1)과 밀도를 추정한 그래프를 같이 겹쳐서 보여줍니다. 위 비대칭도와 첨도에서 확인하셨던 것처럼 정규분포와 비슷하게 대칭적이지만, 첨도가 더 뾰족하게 솟아오른 것을 알 수 있습니다.
+- Normal Q-Q그래프는 Q-Q 플랏으로 정규성을 만족한다면 빨간 일직선 위에 점들이 분포해야 합니다. 그러나, 양 끝 쪽에서 빨간 선을 약간 벗어나는 듯한 모습을 보입니다.
+
+결과적으로 저희가 적합한 ARIMA (0,1,0)으로 남은 잔차는 백색 잡음이지만, 정규성은 따르지 않는다 볼 수 있습니다.
+
+# 테스트 데이터 개수만큼 예측
+y_predict = model_2.forecast(len(y_test)) 
+y_predict = pd.DataFrame(y_predict.values,index = y_test.index,columns=['Prediction'])
+
+# 그래프
+fig, axes = plt.subplots(1, 1, figsize=(12, 4))
+plt.plot(y_train, label='Train')        # 훈련 데이터
+plt.plot(y_test, label='Test')          # 테스트 데이터
+plt.plot(y_predict, label='Prediction')  # 예측 데이터
+plt.legend()
+plt.show()
+
+
+ARIMA 모형은 ARIMA (0,1,0) 모형으로, 1차 차분 시 백색 잡음인 모형입니다. 결국 아래 식처럼 상수항이 없는 임의 보행 모형 (Random Walk Model)을 따른다는 것을 알 수 있습니다  
+$y_t - y_{t-1} = \epsilon t $  
+$y_t  = y_{t-1} + \epsilon t, \epsilon t ~ N(0,\sigma^2)  $    
+그런데, 예측을 할 때 innovation term인 ϵt의 기댓값이 0이기 때문에 이 부분을 0으로 대체하게 됩니다. 따라서, 예측치들은 결국 가장 마지막 관측치가 되는 것이죠. 결국, ϵt 부분은 0으로 대체되고, 임의 보행 모형에서는 예측치들이 가장 마지막 관측치로 동일하기 때문에 일직선을 얻게 되는 것입니다.  
+
+데이터에 특정한 주기나 추세가 없기 때문에, AIC로 모형을 최적화를 하는 과정에서 의미있는 자기 상관 (AR)이나 이동 평균 (MA)를 찾기 어려웠기 때문입니다. 따라서, 최선책으로 임의 보행 모형 어제의 값이 오늘의 값을 가장 잘 설명한다는 모형이 데이터를 가장 잘 설명한다는 결론을 내립니다. 결과적으로, 데이터에서 어떠한 구조를 보기 어렵기 때문에, 가장 마지막 관측치가 가장 좋은 예측치다라 말하고 있는 것입니다.
+
+<font size="5">테스트 데이터를 “관측”할 때마다 모형을 업데이트해주는 REFRESH 전략</font>
+
+용어 부터 확인해 보자  
+static forecasts : train 실제 값을 가지고 다음 값을 예측   
+dynamic forecasts : 예측값을 가지고 다음 값을 예측  
+
+
+history = y_train.tolist()
+predictions = []
+# model_res = ''
+for new_ob  in y_test.values:    
+    model_fit = ARIMA(history,order=(0,1,0)).fit()    
+    output = model_fit.forecast()
+    yhat = output[0]
+    predictions.append(yhat)
+    history.append(new_ob) 
+     
+#     model_res = model_fit
+
+pred_df= pd.DataFrame({"test": y_test, "pred": predictions})
+pred_df    
+
+print(model_fit.summary())
+
+# 그래프
+fig, axes = plt.subplots(1, 1, figsize=(18, 5))
+plt.plot(y_train, label='Train')        # 훈련 데이터
+plt.plot(y_test, label='Test')          # 테스트 데이터
+plt.plot(pred_df['pred'], label='Prediction')  # 예측 데이터
+plt.legend()
+plt.show()
+
+
+###################################### 실습 세번째(RMSE로 파라미터 구하기)
+import warnings
+from math import sqrt
+from pandas import read_csv
+from pandas import datetime
+from statsmodels.tsa.arima.model import ARIMA
+from sklearn.metrics import mean_squared_error
+ 
+# evaluate an ARIMA model for a given order (p,d,q)
+def evaluate_arima_model(X, arima_order):
+	# prepare training dataset
+	train_size = int(len(X) * 0.66)
+	train, test = X[0:train_size], X[train_size:]
+	history = [x for x in train]
+	# make predictions
+	predictions = list()
+	for t in range(len(test)):
+		model = ARIMA(history, order=arima_order)
+		model_fit = model.fit()
+		yhat = model_fit.forecast()[0]
+		predictions.append(yhat)
+		history.append(test[t])
+	# calculate out of sample error
+	rmse = sqrt(mean_squared_error(test, predictions))
+	return rmse
+ 
+# evaluate combinations of p, d and q values for an ARIMA model
+def evaluate_models(dataset, p_values, d_values, q_values):
+	dataset = dataset.astype('float32')
+	best_score, best_cfg = float("inf"), None
+	for p in p_values:
+		for d in d_values:
+			for q in q_values:
+				order = (p,d,q)
+				try:
+					rmse = evaluate_arima_model(dataset, order)
+					if rmse < best_score:
+						best_score, best_cfg = rmse, order
+					print('ARIMA%s RMSE=%.3f' % (order,rmse))
+				except:
+					continue
+	print('Best ARIMA%s RMSE=%.3f' % (best_cfg, best_score))
+ 
+# load dataset
+def parser(x):
+	return datetime.strptime('190'+x, '%Y-%m')
+series = read_csv('shampoo.csv', header=0, index_col=0, parse_dates=True, squeeze=True, date_parser=parser)
+# evaluate parameters
+
+p_values = [0, 1, 2]
+d_values = range(0, 3)
+q_values = range(0, 3)
+warnings.filterwarnings("ignore")
+evaluate_models(series.values, p_values, d_values, q_values)
+
+
+#########################################################SARIMA 모형 적용
+
+
+from itertools import product, combinations
+from tqdm import tqdm
+p, q = range(1,3), range(1,3)
+d = range(0,1)
+P, Q = range(1,3), range(1,3)
+D = range(1,2)
+m = 12
+trend_pdq = list(itertools.product(p, d, q))
+seasonal_pdq = [(candi[0], candi[1], candi[2], m) for candi in list(itertools.product(P, D, Q))]
+## SARIMAX
+AIC = []
+SARIMAX_order = []
+for trend_param in tqdm(trend_pdq):
+    for seasonal_params in seasonal_pdq:
+        try:
+            result =sm.tsa.SARIMAX(train_data.values, order = trend_param, 
+                                   seasonal_order = seasonal_params, exog = None).fit()
+            print('Fit SARIMAX: trend_order={} seasonal_order={} AIC={}, BIC={}'.format(trend_param, 
+                                                seasonal_params, result.aic, result.bic, end='\r'))
+            AIC.append(result.aic)
+            SARIMAX_order.append([trend_param, seasonal_params])
+        except:
+            continue
+## Parameter Selection
+print('The smallest AIC is {} for model SARIMAX{}x{}'.format(min(AIC), SARIMAX_order[AIC.index(min(AIC))][0], SARIMAX_order[AIC.index(min(AIC))][1]))
+
+#########################################################SARIMA 예측 / 시각화
+from sklearn.metrics import r2_score
+
+prediction = model.get_forecast(len(test_data))
+prediction_value = prediction.predicted_mean
+r2_score(test_data,prediction_value)
+pred_ci = prediction.conf_int()
+
+predict_index = list(test_data.index)
+predict_df = pd.DataFrame(prediction_value,index = test_data.index, columns=['Prediction'])
+
+fig, ax = plt.subplots(figsize=(12,6))
+df.plot(ax = ax)
+ax.vlines('1958-08-01',0,1000,linestyles='--',color='r', label='Start of Forest')
+predict_df.plot(ax = ax, label='Prediction')
+ax.fill_between(predict_index,pred_ci[:, 0],pred_ci[:, 1], color='k', alpha=0.2, label ='0.95 Prediction Interval')
+ax.legend(loc='upper left')
+plt.show()
+
+
+auto_model = pm.auto_arima(y = train_data.values        # 데이터
+                      , d = 1            # 차분 차수, ndiffs 결과!
+                      , start_p = 0 
+                      , max_p = 2   
+                      , start_q = 0 
+                      , max_q = 2   
+                      , m = 12
+                      , D=1
+                      , max_P = 3,max_Q = 3
+                      , seasonal = True # 계절성 ARIMA가 아니라면 필수!
+                      , stepwise = True
+                      , trace=True
+                      )
+
+print(auto_model.summary())
+
+
+
+#########################################################var 
+# Draw Plot
+def plot_df(df, x, y, title="", xlabel='Date', ylabel='Value', dpi=100):
+    plt.figure(figsize=(10,3), dpi=dpi)
+    plt.plot(x, y, color='tab:red')
+    plt.gca().set(title=title, xlabel=xlabel, ylabel=ylabel)
+    plt.show()
+    
+plot_df(df, x=df.year, y=df.chic, title='Polulation of the chicken across US')   
+plot_df(df, x=df.year, y=df.egg, title='Egg Produciton')

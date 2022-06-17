@@ -318,9 +318,602 @@ print(anova_lm(lm, typ = 3 ))
 
 
 
+########################################################################################################
+두집단의 분산검정
+from scipy import stats
+n1 = len(first_grade)
+n2 = len(second_grade)
+
+df1 = n1 -1
+df2 = n2 -2
+
+v1 = np.var(first_grade, ddof=1)
+v2 = np.var(second_grade, ddof=1)
+
+conf_a = 0.05
+test_a = 0.05 
+
+fstat = v1/v2
+
+print("n1 분산 : {:.3f}, n2 분산: {:.3f}, 검정통계량: {:.3f} = F({},{})".format(v1,v2, fstat, df1,df2))
+
+f1 = stats.f.ppf(conf_a/2, df1,df2)
+f2 = stats.f.ppf(1- conf_a/2, df1,df2)
+CR1 = f1* fstat
+CR2 = f2* fstat
+
+# 가설검정(two-sided)
+
+if v1 - v2 < 0:
+    sp = (stats.f.cdf(fstat,df1,df2))*2
+else:
+    sp = (1 - stats.f.cdf(fstat,df1,df2))
+    
+cv1 = stats.f.ppf(test_a/2, df1, df2)
+cv2 = stats.f.ppf(1- test_a/2, df1, df2)
+
+cv = "{:.3f} 와 {:.3f}".format(cv1, cv2)
+
+print("임계값 범위 %s"  %(cv))
+print("F 검정통계량은 %.3f, 유의 확률 %.7f"%(fstat,sp))
+
+# 모집단 등분산 검정
+from scipy.stats import bartlett #정규성 가정을 만족하는 집단들에 대한 등분산 검정
+stat, p = bartlett(first_grade, second_grade)
+print("bartlette 검정 결과 {:.2f}, pvalue {:.7f}".format(stat, p))
+# 두 모집단의 분산은 동일하지 않다.
+
+########################################################################################################
+모평균의 신뢰구간 예
+
+from scipy import stats 
+import numpy as np
+
+confidenceLevel = 0.95
+numOfTails      = 2  
+alpha           = (1 - confidenceLevel)/numOfTails
+z_critical      = stats.norm.ppf(1 - alpha)
+x = 199.5
+s = 5
+n = 50
+
+lowerCI = x - (z_critical * s / np.sqrt(50))
+upperCI = x + (z_critical * s / np.sqrt(50))
+lowerCI, upperCI
+
+### 모분산을 아는 경우 검정
+from scipy import stats 
+import numpy as np
+
+confidenceLevel = 0.95
+numOfTails      = 2  
+alpha           = (1 - confidenceLevel)/numOfTails
+z_critical      = stats.norm.ppf(1 - alpha)
+
+u = 300
+x = 310
+s = 30
+n = 25
+
+statists =  (x - u)  / (s / np.sqrt(n))
+
+p_value = (1- stats.norm.cdf(statists)) *2  ## stats.norm.sf(abs(statists)) 동일
+z_critical , statists, p_value
+
+## 모 평균에 대한 차이 검정(모분산을 모르는 경우)
+data = np.array([20,20,25,21,21,23,19,18,22])
+
+confidenceLevel = .95
+n               = 9
+ddof            = n -1
+numOfTails      = 2
+alpha           = (1 - confidenceLevel)/numOfTails
+t_critical      = abs(stats.t.ppf(alpha,ddof))
+
+mean = np.mean(data)
+s     = statistics.stdev(data)  # standard deviation
+sem   = stats.sem(data)         # standard e
+# confidence interval formula
+lowerCI = mean - (t_critical * sem)
+upperCI = mean + (t_critical * sem)
+
+#  print confidence intervals
+print('Confidence Level:\t{:.0%}'.format(confidenceLevel))
+print('Number of Tails:\t{}'.format(numOfTails))
+print('Degrees of Freedom:\t{}'.format(ddof))
+print('alpha:\t\t\t{:.4f}'.format(alpha))
+print('t-critical value:\t{:.4f}  <---'.format(t_critical))
+print('\nConfidence Interval:\nlower CI\t\t{:.4f}'.format(lowerCI))
+print('upper CI:\t\t{:.4f}'.format(upperCI))
+
+### 모평균의 가설 검정(모분산을 모르는경우)
+confidenceLevel = 0.95
+numOfTails = 1
+alpha           = (1 - confidenceLevel)/numOfTails
+
+x = 39
+u = 40 
+n = 8
+ddof = n -1
+s = 5
+t_critical = abs(stats.t.ppf(alpha, ddof))
+
+tt = (x-u) / (s / np.sqrt(n))
+
+pval = stats.t.sf(np.abs(tt), ddof)
+
+print('t-statistic = %6.3f pvalue = %6.4f'%(tt,pval))
+print('t_critical', t_critical)
+
+## 일표본 T 검정
+# 일표본 T검정 실시
+#H0: 3학년 신장평균은 174이다
+#H1: 3학년 신장평균은 174가 아니다
+from scipy.stats import t
+third_sample = [173.5, 174., 178.3, 169.6, 177., 174.4, 180., 168.7, 170.1, 170.2]
+m0 = 174
+m1 = np.mean(third_sample)
+n = len(third_sample)
+df = n-1
+s = np.std(third_sample, ddof=1)
+se = s / np.sqrt(n)
+T = (m1 - m0) / se
+alpha = 0.05
+cv1 = t.ppf(alpha/2, df)
+cv2 = t.ppf(1-alpha/2, df)
+
+print("임계값 검정", "="*50)
+print("유의수준 {:.2f} 기준 임계값의 범위는 {:.2f}~{:.2f}".format(alpha, cv1, cv2))
+print("그런데 검정통계량은 {:.2f}이므로 귀무가설을 기각할 수 없다.".format(T))
+
+print("pvalue 검정", "="*50)
+print("유의수준 {:.2f}인데 양측검정 결과 pvalue는 {:.2f}이므로 귀무가설을 기가할 수 없다."
+      .format(alpha, t.cdf(T, df) *2))
+
+#즉, 3학년의 평균 신장은 174이다.
+
+################################################### 단일 모집단에 모비율에 대한 추론
+### 모비율에 대한 신뢰구간 
+p = 430 / 1000
+n = 1000
+'''
+90%신뢰 구간 일경우
+'''
+confidenceLevel = .90
+numOfTails      = 2
+alpha           = (1 - confidenceLevel)/numOfTails
+
+#  Percent Point Function
+#  - calculates z-critical from (1-alpha)
+z_critical = stats.norm.ppf(1 - alpha)
+
+lowerCI = p - z_critical * (np.sqrt((p * (1-p)) / n))
+upperCI = p + z_critical * (np.sqrt((p * (1-p)) / n))
+
+lowerCI, upperCI
+
+### 모비율에 대한 가설 검정
+n = 1000
+p = 420 / n
+p0 = 0.43
+'''
+90%신뢰 구간 일경우
+'''
+confidenceLevel = 0.9
+numOfTails      = 1
+alpha           = (1 - confidenceLevel)/numOfTails
+
+#  Percent Point Function
+#  - calculates z-critical from (1-alpha)
+z_critical = stats.norm.ppf(1 - alpha)
+
+lowerCI = p - z_critical * (np.sqrt((p * (1-p)) / n))
+upperCI = p + z_critical * (np.sqrt((p * (1-p)) / n))
+
+z_critical , lowerCI, upperCI
+
+################################################### 단일 모분산에 대한 추론
+### 모분산에 대한 신뢰구간
+import numpy as np
+import pandas as pd
+import statistics
+from scipy import stats
+
+alpha = 0.05
+x = np.array([20.0,21.5,20.9,19.8,22.5,20.3,23.6,18.0, 23.3, 17.8])
+n = len(x)
+s2 = statistics.variance(x)
+df = n - 1
+
+upper = (n - 1) * s2 / stats.chi2.ppf(alpha / 2, df)
+lower = (n - 1) * s2 / stats.chi2.ppf(1 - alpha / 2, df)
+lower , upper
+### 모분산에 대한 가설 검정
+from scipy import stats
+n = 25
+s2 = 0.8
+ss = 1.24
+alpha = 0.05
+df = n-1
+
+statistics = ((n - 1) * ss ) /  s2
+print('검정통계량 ==>',statistics)
+
+upper = (n - 1) * ss / stats.chi2.ppf(alpha / 2, df)
+lower = (n - 1) * ss / stats.chi2.ppf(1 - alpha / 2, df)
+
+print('신뢰구간 ==>',lower,upper)
+
+pvalue = stats.chi2.sf(statistics, df)
+
+print('P value ==>',pvalue)
+
+
+################################################### 정규성 검정
+from scipy.stats import levene
+# 정규성, 등분산성 검정
+A_S = df[ (df['아이템']=='A') & (df['자동차']=='S1-1')]['기록']
+A_R = df[ (df['아이템']=='A') & (df['자동차']=='RF2') ]['기록']
+A_D = df[ (df['아이템']=='A') & (df['자동차']=='DrB') ]['기록']
+
+B_S = df[ (df['아이템']=='B') & (df['자동차']=='S1-1')]['기록']
+B_R = df[ (df['아이템']=='B') & (df['자동차']=='RF2') ]['기록']
+B_D = df[ (df['아이템']=='B') & (df['자동차']=='DrB') ]['기록']
+
+C_S = df[ (df['아이템']=='C') & (df['자동차']=='S1-1')]['기록']
+C_R = df[ (df['아이템']=='C') & (df['자동차']=='RF2') ]['기록']
+C_D = df[ (df['아이템']=='C') & (df['자동차']=='DrB') ]['기록']
+
+#정규성 불만족 (데이터 개수가 너무 적음)
+for i, data in enumerate([A_S, A_R, A_D, B_S, B_R, B_D, C_S, C_R, C_D]):
+    try:
+        stat, p = shapiro(data)
+        print("shapiro {:.2f}, p {:.2f}".format(stat, p))
+    except:
+        print(i, "shapiro error")
+
+stat, p = bartlett(A_S, A_R, A_D, B_S, B_R, B_D, C_S, C_R, C_D)
+stat, p = levene(A_S, A_R, A_D, B_S, B_R, B_D, C_S, C_R, C_D)
+print("levene {:.2f}, p {:.2f}".format(stat, p)) #등분산 가정을 만족함
+
+
+################################################### 회귀분석
+import pandas as pd 
+x = np.array([1095,1110,1086,1074,1098,1105,1163,1124,1088,1064])
+y = np.array([53.655,57.72,52.128,52.626,54.9,56.355,58.15,57.324,53.312,51.072])
+
+data = pd.DataFrame({'x':x,'y':y})
+
+import statsmodels.formula.api as smf
+result = smf.ols('y~x', data = data).fit()
+print(result.summary())
+
+<font  size="5"> 결과  </font>
+
+<font size="5">추정된 회귀식 :  $\hat y = -33.3577 + 0.08X$</font>
+
+<font  size="5"> 회귀 모형 검정  </font>
+
+- 회귀 계수가 유의 한가?
+-> 회귀분석 결과 상수항과 독립변수 x(환율)의 회귀 계수에 대한 p-value가 x(환율)은 유의수준 0.05 보다 작으므로 통계적으로 유의 하다고 판단 할 수 있으며, 상수항은 0.05 보다 크기 때문에 유의 하다고 볼수 없다. 
+- 모형의 설명력은?
+-> Adj. R-squared 즉 수정된 결정계수가 0.749라는 것은 해당 회귀모형이 현 데이터의 약 74%를 설명 할수 있다.
+
+- 모형의 통계적 유의성
+-> F-statistic:27.79, Prob (F-statistic):0.000753가 유의 수준 0.05 보다 매우 작기 때문에 추정된 회귀 모형은 통계적으로 유의하다고 할 수 있다.
+
+#### 5-2) 위에서 구한 회귀식이 유용한지 아니면 유용하지 않는지 모형의 적합성 검정(분산분석)을 수행하시오
+
+from statsmodels.formula.api import ols
+from statsmodels.stats.anova import anova_lm
+
+formula = 'y ~ x'
+lm = ols(formula, data).fit()
+print(anova_lm(lm))
+
+################################################### 로지스틱회귀분석
+import statsmodels.api as sm
+
+def Logistic(x):
+    model=sm.Logit.from_formula(f'target~{x}',train).fit()
+    print('#############################')
+    print(f'{x}에 따른 target의 odds')
+    print('#############################')
+    print(model.summary())
+    print(np.round(np.exp(model.params),2))
+    print('\n')
+
+#1.성별
+Logistic('sex')
+
+<font size="5">확률 구하기</font>  
+
+<font size="5">$\text{logitstic}(z) = \sigma(z) = \dfrac{1}{1+\exp{(-z)}}$</font>
+
+## 로지스틱 회귀 분석 좀더 추가적으로 정리
+
+로지스틱 회귀모형: 반응변수가 이진형인 경우 $y \in \{0,1\}$
+
+$\log\left(\frac{P(y=1|x)}{1-P(y=1|x)}\right) = \beta_0 + \sum_{j=1}^p \beta_j x_j,~~~ \text{ 로지스틱 모형 식}$
+
+⇔ $\Leftrightarrow P(y=1|x) = \frac{\exp(\beta_0 + \sum_{j=1}^p \beta_j x_j)}{1+\exp(\beta_0+ \sum_{j=1}^p \beta_j x_j)}$
+
+
+## 로지스틱 회귀모형의 해석
+위의 로지스틱 모형에서 좌변의 식을 로그오즈(log-odds)라고 함
+
+$\log\left(\frac{P(y=1|x)}{1-P(y=1|x)}\right) = \beta_0 + \sum_{j=1}^p \beta_j x_j$
+
+위에서 로그함수 안의 식을 오즈(odds)라고 하며
+
+$odds(event) \equiv \frac{P(y=1|x)}{1-P(y=1|x)} = \frac{P(y=1|x)}{P(y=0|x)}$
+
+역으로, 이벤트가 발생할 확률은 오즈의 비(오즈비; odds ratio)로 표현됨
+
+$P(y=1|x) = \frac{odds(event)}{1 + odds(event)}$
+
+
+### Odds(오즈 또는 승산)
+로지스틱 회귀분석에서 임의의 설명변수의 추이에 따른 목표변수의 추이를 표현할 때 주로 사용되는 것이 오즈(Odds)와 오즈비(Odds ratio)입니다. 오즈란 임의의 이벤트가 어떤 요인에 의해 발생하지 않을 확률 대비 발생할 확률을 말합니다. 아래와 같이 임의 이벤트가 발생할 확률을 라고 했을 때 오즈는 다음과 같이 계산할 수 있습니다.
+
+$Odds = \frac{(이벤트 발생 확률)}{(이벤트 미발생 확률)} = \frac{p}{1-p}$
+
+### Odds Ratio(오즈비 또는 승산비)
+Odds Ratio는 특정 요인의 여부에 따른 이벤트 발생 확률을 비교할 때 사용되는 척도로서 말 그대로 오즈 간의 비율을 의미합니다.
+
+아래와 같이 어떤 요인의 노출 여부에 따른 질병 감염률을 오즈비를 통해 계산할 수 있습니다.
+
+$Odds Ratio = \frac{Odds(요인 노출 and 감염)}{Odds(요인 미노출 and 감염)} = \frac{\frac{노출 and 감염}{노출 and 비감염}}{\frac{미노출 and 감염}{미노출 and 비감염}}= \frac{\frac{a}{a+b}}{\frac{b}{a+b}} / \frac{\frac{c}{c+d}}{\frac{d}{c+d}} = \frac{ad}{bc}$
+
+<font size="4">오즈비 활용 예시</font>
+
+- $Odds Ratio < 1$ 인 경우, X가 감소하는 방향으로 목표변수에 영향을 미칩니다.
+- $Odds Ratio > 1$ 인 경우, X가 증가하는 방향으로 목표변수에 영향을 미칩니다.
+
+
+위에 탈모와 약물 남용 유무에 따른 참가자 수가 명시되어 있는 표를 기반으로 오즈 비율을 계산하면 다음과 같습니다.
+
+$Odds Ratio = \frac{79*178}{152*19} = 4.87$
+
+따라서 약물 남용 그룹에서 탈모가 발생할 오즈는 약물 남용하지 않은 그룹에서 탈모가 발생할 오즈의 $4.87$배 높다고 해석할 수 있습니다.
+
+<font size="4">오즈비 활용 예시2</font>
 
 
 
+- 흡연자 x=1 의 오즈
+-> $odds(x=1) = \frac{P(Y=1|x=1)}{P(Y=0|x=1)} = \frac{15/400}{385/400} = 15/385 = 0.03896104,$
+
+- 비흡연자(x=0)의 오즈 
+-> $odds(x=0) = \frac{P(Y=1|x=0)}{P(Y=0|x=0)} = \frac{3/400}{397/400} = 3/397 = 0.007556675$
+
+<font size="4">오즈비 (OR; odds ratio)</font>
+
+- 위험인자  x=1 에서의 오즈와  x=0 에서의 오즈의 비
+-> $OR = \frac{odds(x=1)}{odds(x=0)}.$
+- 위험( x )의 유무 혹은 한 단위 증가할 때(0에서 1로 증가) 상대적 위험
+- 즉, 특정 리스크에 노출될 경우, 그렇지 않은 경우에 대한 상대적 위험도
+- 위의 예: 흡연자의 폐암에 대한 위험이 비흡연자의 위험에 비해 5.16배 증가
+-> $\frac{odds(x=1)}{odds(x=0)} \approx 0.03896104/0.007556675 \approx 5.16$
+
+<font size="5">로지스틱 회귀 식 사용 할때</font>
+
+\log\left(\frac{P(y=1|x)}{1-P(y=1|x)}\right) = -0.03069 + 1.64013 x
+
+<font size="4">$\log\left(\frac{P(y=1|x)}{1-P(y=1|x)}\right) = -0.03069 + 1.64013 x$</font>
+
+\log\left(\frac{P(y=1|{\rm stage, xray, acid})}{1-P(y=1|{\rm stage, xray, acid})}\right) = -3.0518 + 1.6453~ {\rm stage} + 1.9116~ {\rm xray}+ 1.6378~{\rm acid}
+
+<font size="4">$\log\left(\frac{P(y=1|{\rm stage, xray, acid})}{1-P(y=1|{\rm stage, xray, acid})}\right) = -3.0518 + 1.6453~ {\rm stage} + 1.9116~ {\rm xray}+ 1.6378~{\rm acid}$</font>
+    
+########################### 모형식
 
 
+모형식
+
+$\log\left(\frac{P(y=1|{\rm stage, xray, acid})}{1-P(y=1|{\rm stage, xray, acid})}\right) = -3.0518 + 1.6453~ {\rm stage} + 1.9116~ {\rm xray}+ 1.6378~{\rm acid}$
+
+결과의 해석
+
+1. 유의한 변수들(stage, xray, acid; 유의확률: p<0.05 )은 전립선암에 영향을 줌
+- 질병의 단계(stage)가 심화
+- X-선 결과(xray)가 좋지 않을수록
+- 혈청인산염 값(acid)이 높을수록
+
+2. 오즈비
+
+- 각 위험인자의 노출정도에 따라 전립선암에 걸릴 상대적인 위험도 (오즈비, OR)는 위험인자에 노출되지 않은 경우 대비 각각 5.18, 6.76, 5.14배 정도 높음    
+	
+###################################################### 시계열 분석	
+def preprocess(df):
+    """
+    주가 데이터 전처리
+     - 월~금까지 데이터를 남겨두고 지운다. 
+     - 휴장일의 경우 전날의 데이터를 그대로 사용
+     - 이렇게 하는 이유는 5일 로테이션을 맞추기 위해서 (Seasonality)
+    """
+    df = df.copy()
+    datetime_index = pd.DatetimeIndex(pd.date_range(df.index[0], df.index[-1]))
+    
+    df = df.reindex(datetime_index)
+    df = df.loc[~df.index.weekday.isin({5, 6})]
+    
+    df.fillna(method='ffill', inplace=True)
+    df.index.name = 'datetime'
+    return df
+
+def add_stl_plot(fig, res, legend):
+    """Add 3 plots from a second STL fit"""
+    axs = fig.get_axes()
+    comps = ['trend', 'seasonal', 'resid']
+    for ax, comp in zip(axs[1:], comps):
+        series = getattr(res, comp)
+        if comp == 'resid':
+            ax.plot(series, marker='o', linestyle='none', color='tomato')
+        else:
+            ax.plot(series, color='tomato')
+        
+        ax.legend(legend, frameon=False)
+	
+from statsmodels.tsa.seasonal import STL
+stl = STL(series, period=30, robust=True)
+res = stl.fit()
+fig = res.plot()
+fig.set_size_inches(12, 12)
+
+add_stl_plot(fig, res, ['Robust', 'Non-robust'])
+# display(stl.config)
+
+
+# STL 시계열 분해(월 계절성 가정)
+STL(series.resample('M').mean(), period=12).fit().plot()
+plt.show()
+
+
+# 정상성 확인 함수
+from statsmodels.tsa.stattools import kpss
+from statsmodels.tsa.stattools import adfuller
+import warnings
+warnings.filterwarnings("ignore")
+
+def kpss_test(series, **kw):    
+    statistic, p_value, n_lags, critical_values = kpss(series, **kw)
+    
+    # Format Output
+    print(f'KPSS Statistic: {statistic}')
+    print(f'p-value: {p_value}')
+    print(f'num lags: {n_lags}')
+    print('Critial Values:')
+    
+    for key, value in critical_values.items():
+        print(f'   {key} : {value}')    
+    print('KPSS(추세가 있어도 계절성만 없다면 정상으로 판별함)')
+    print(f'Result: The series is {"not " if p_value < 0.05 else ""} stationary')
+
+def print_adfuller (x):
+    result = adfuller(x)
+    print(f'ADF Statistic: {result[0]:.3f}')
+    print(f'p-value: {result[1]:.3f}')
+    print('Critical Values:')
+    for key, value in result[4].items():
+        print('\t%s: %.3f' % (key, value)) 
+    print('ADF (계절성이 있어도 추세만 없다면 정상으로 판별함)')
+    print(f'Result: The series is {"not " if result[1] >= 0.05 else ""} stationary')
+    
+	
+###################################################### 최대 우도 추정법
+
+최대우도(Maximum Likelihood)란 도출된 결과의 각 가설마다 계산된 가능도(우도) 값 중 가장 큰 값을 말한다. 즉 발생할 확률이 가장 큰 가설이라 할 수 있다. 하지만 만약 모수가 알려지지 않은 어떤 $\theta$인 확률분포가 있다면 여기서 뽑은 표본들을 이용해 $\theta$를 추정할 수 있다. 이를 최대 우도 추정(Maximum Liklihood Estimation, MLE)라고 한다. 우도 또한 정확한 수치가 아닌 추정에 가깝기 때문에 이러한 방식을 적용하기에 적절하다 볼 수 있다.
+
+우도함수 정의
+
+$L(\theta \mid X) = Pr(\theta = k \mid X \sim f(x,\theta), X = x_1, x_2, ... , x_n)$
+
+변수 : $X$
+
+관측치 $x_1, x_2, x_3, ... , x_n$에서 확률분포를 f(x, \theta) 라고 가정하였을 때 
+
+모수$\theta$ 가 발생할 가능성입니다.
+
+***
+베르누이 분포의 확률질량함수 :   $f(x) = p^x(1-p)^{1-x} , x \in {0,1}$
+
+모수$(p)$ : 성공확률
+
+n개의 관측치에 대한 우도함수는 다음과 같습니다.
+
+$L(p \mid X = x_1, x_2, ..., x_n) = L(p \mid X = x_1) ... L(p \mid X = x_n)$
+
+$= p^{x_1}(1-p)^{1-x_1} ... p^{x_n}(1-p)^{1-x_n}= p^{x_1 + x_2 + ... + x_n} (1-p)^{n-x_1-x_2-...-x_n}$
+
+계산을 용이하게 하기 위해 로그 우도함수로 변환하면
+
+$\ln{L(p \mid X = x_1, x_2, ..., x_n)} = (x_1 + x_2 + ... + x_n) * \ln{p} + (n - x_1 - x_2 - ... - x_n) * \ln{(1-p)}$
+	
+	
+## 예제1. 동전을 100번 던졌을 때 앞면이 55번 나온 경우 앞면이 나올 확률 p 에 대한 MLE를 구하시오.	
+여기서 주의깊게 봐야할 곳은 동전을 100번 던진것입니다. 이산확률분포에서 설명했다싶이 각 동전 던지기는 베르누이 시행을 의미하고 여러번 던지는 것은 베르누이 시행의 단순 덧셈, 즉 이항분포를 따른다고 하였습니다. 그렇다면 단순하게 앞면이 55번 나오는 확률을 어떻게 계산할 수 있을 까요? 이항분포 식을 사용하면 $P(55\ heads) = \binom{100}{55}p^{55}(1 - p)^{45}$ 가 됨을 알 수 있습니다. 이 확률은 현재 p가 정해지지 않았기 때문에 p
+에 의존한다고 볼 수 있습니다. 따라서 우도 $P(55\ heads|p) = \binom{100}{55}p^{55}(1-p)^{45}$
+
+이제 파라미터 $\hat{p}$ 를 얻어야 합니다. 이 $\hat{p}$ 는 우도 함수를 최대화하는 값이기 때문에 양변을 p에 대해서 미분을 하고 0이 되는 값을 찾으면 됩니다.
+
+$\Rightarrow 55p^{54}(1 - p)^{45} = 45p^{55}(1 - p)^{44}$
+
+$\Rightarrow 55p^{54}(1 - p)^{45} = 45p^{55}(1 - p)^{44}$
+
+$\Rightarrow 55(1 - p) = 45p$
+
+$\Rightarrow 100p = 55$
+
+$\Rightarrow p = 0.55$
+
+이므로 $\hat{p}=0.55$ 임을 얻을 수 있습니다.
+
+
+############################################
+***
+
+로그 우도(log likelihood) 통한 예제 풀이
+
+$ln{P(55\ heads|p)} = \ln{\binom{100}{55}} + 55\ln{p} + 45\ln{1 - p}$
+
+로그 우도의 좋은 점은 그냥 우도의 MLE와 로그 우도의 MLE와 값이 동일하다는 점입니다.
+
+$\Rightarrow \frac{d}{dp}(log\ likelihood) = \frac{d}{dp} [\ln{\binom{100}{55}} + 55\ln{p} + 45\ln{1 - p}] = 0$
+
+$\Rightarrow \frac{55}{p} - \frac{45}{1 - p} = 0$
+
+$\Rightarrow 55(1 - p) = 45p$
+
+$\Rightarrow p = 0.55$
+
+이므로 $\hat{p} = 0.55$ 로 그냥 우도의 MLE와 값이 동일한 것을 볼 수 있습니다.
+
+
+***
+이항 분포 우도 함수 
+
+$L(P) = \binom{n}{k}p^{k}(1 - p)^{n-k}$  
+L(P) = \binom{n}{k}p^{k}(1 - p)^{n-k}
+
+
+import matplotlib.pyplot as plt
+import numpy as np
+from scipy.special import comb
+
+k = 8       # 성공 횟수
+n = 10      # 시행 횟수
+
+def pmf(n, k, p):
+    return comb(n, k)*(p**k)*((1-p)**(n-k))
+
+def likelihood(n, k, p):
+    return p**k*((1-p)**(n-k))
+
+# result = [pmf(n, k, p/10) for p in np.arange(0.1, 1, 0.1)]
+result = [likelihood(n, k, p) for p in np.arange(0.1, 1, 0.1)]
+
+sum = 0
+print("n="+str(n)+', k='+str(k))
+for i, val in enumerate(result):
+    sum += val
+    print(str((i+1)/10)+' : '+str(val))
+print("sum : ", sum)
+
+plt.bar(range(1, 10), result)
+plt.title("n="+str(n)+', k='+str(k))
+plt.xlabel("x/10")
+plt.show()
+
+# n=10, k=8
+# 0.1 : 8.100000000000005e-09
+# 0.2 : 1.6384000000000011e-06
+# 0.3 : 3.2148900000000034e-05
+# 0.4 : 0.0002359296000000001
+# 0.5 : 0.0009765625
+# 0.6 : 0.0026873855999999994
+# 0.7 : 0.005188320900000001
+# 0.8 : 0.0067108864
+# 0.9 : 0.004304672099999999
+# sum :  0.020137552500000003
 
